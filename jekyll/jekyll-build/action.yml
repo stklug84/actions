@@ -1,0 +1,62 @@
+# Composite action: build a Jekyll site with Bundler.
+#
+# Runs `bundle exec jekyll build` for the given source/destination. When
+# `baseurl` is non-empty it is passed through as `--baseurl` (used by GitHub
+# Pages project sites via actions/configure-pages). Bundler/Ruby must already
+# be set up (see ruby/setup-ruby-bundler).
+#
+# Usage:
+#   - uses: stklug84/actions/jekyll/jekyll-build@v1
+#     with:
+#       source: "./"
+#       destination: "./_site"
+#       baseurl: ${{ steps.pages.outputs.base_path }}   # optional
+name: Build Jekyll site
+description: Build a Jekyll site with Bundler (bundle exec jekyll build).
+
+inputs:
+  source:
+    description: "Jekyll source directory."
+    required: false
+    default: "./"
+  destination:
+    description: "Build output directory."
+    required: false
+    default: "./_site"
+  baseurl:
+    description: >-
+      Optional baseurl passed as --baseurl. Leave empty to omit the flag.
+    required: false
+    default: ""
+  jekyll-env:
+    description: "Value for the JEKYLL_ENV environment variable."
+    required: false
+    default: "production"
+  working-directory:
+    description: "Directory to run the build from."
+    required: false
+    default: "."
+
+runs:
+  using: composite
+  steps:
+    - name: Build with Jekyll (Bundler)
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        JEKYLL_ENV: ${{ inputs.jekyll-env }}
+        JEKYLL_SOURCE: ${{ inputs.source }}
+        JEKYLL_DESTINATION: ${{ inputs.destination }}
+        JEKYLL_BASEURL: ${{ inputs.baseurl }}
+      run: |
+        set -eu
+        if [ -n "${JEKYLL_BASEURL}" ]; then
+          bundle exec jekyll build \
+            --source "${JEKYLL_SOURCE}" \
+            --destination "${JEKYLL_DESTINATION}" \
+            --baseurl "${JEKYLL_BASEURL}"
+        else
+          bundle exec jekyll build \
+            --source "${JEKYLL_SOURCE}" \
+            --destination "${JEKYLL_DESTINATION}"
+        fi

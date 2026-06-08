@@ -1,0 +1,33 @@
+# Composite action: install Ruby and bootstrap Bundler with caching.
+#
+# Wraps ruby/setup-ruby so callers get a single, versioned entry point for
+# Ruby + Bundler setup. The Ruby version is resolved from .ruby-version /
+# .tool-versions / Gemfile when `ruby-version` is left empty.
+#
+# Usage:
+#   - uses: stklug84/actions/ruby/setup-ruby-bundler@v1
+#     with:
+#       ruby-version: ""        # optional; empty → resolve from repo files
+name: Setup Ruby with Bundler
+description: Install Ruby and enable Bundler caching via ruby/setup-ruby.
+
+inputs:
+  ruby-version:
+    description: >-
+      Ruby version for ruby/setup-ruby. Leave empty to resolve from
+      .ruby-version / .tool-versions / Gemfile.
+    required: false
+    default: ""
+  bundler-cache:
+    description: "Enable Bundler caching (true/false)."
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ inputs.ruby-version }}
+        bundler-cache: ${{ inputs.bundler-cache }}
