@@ -1,3 +1,4 @@
+---
 # Composite action: validate an EPUB with epubcheck and clean the
 # workspace.
 #
