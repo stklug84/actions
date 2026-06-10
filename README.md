@@ -1,5 +1,7 @@
 # actions
 
+[![Lint](https://github.com/stklug84/actions/actions/workflows/lint.yml/badge.svg)](https://github.com/stklug84/actions/actions/workflows/lint.yml)
+
 Central, reusable **composite actions** for this account. Unlike reusable
 workflows (which must live flat in `.github/workflows/`), composite actions can
 be grouped into subdirectories — so they are organized here by domain.
@@ -176,12 +178,12 @@ so failures leave the workspace intact for log collection (e.g. via
     filter-file: config/epubcheck-filter.txt
 ```
 
-| Input               | Default   | Description                                                 |
-|---------------------|-----------|-------------------------------------------------------------|
-| `main`              | —         | Main document basename without `.epub`. Required.           |
-| `epubcheck-version` | `"5.1.0"` | epubcheck release to install.                               |
-| `filter-file`       | `""`      | Optional `--customMessages` file (applied when it exists).  |
-| `clean`             | `"true"`  | Clean the workspace after successful validation.            |
+| Input               | Default   | Description                                                            |
+|---------------------|-----------|------------------------------------------------------------------------|
+| `main`              | —         | Main document basename without `.epub`. Required.                      |
+| `epubcheck-version` | `"5.1.0"` | epubcheck release to install.                                          |
+| `filter-file`       | `""`      | Optional `--customMessages` file (applied when it exists).             |
+| `clean`             | `"true"`  | Clean the workspace after successful validation.                       |
 | `keep`              | `""`      | Newline list of files preserved. Empty → `<main>.epub` + `<main>.pdf`. |
 
 ## `texlive/upload-build-logs`
@@ -227,6 +229,11 @@ scripts/shellcheck-actions.sh
 yamllint --strict .
 npx markdownlint-cli2 --config .markdownlint.yaml '**/*.md'
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow, repository
+conventions, and how to run the lint checks locally.
 
 ## Versioning
 
