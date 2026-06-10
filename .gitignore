@@ -1,0 +1,13 @@
+# ignore global .gitignore
+!*
+.DS_Store
+
+# ignore merge files
+*.orig
+
+# ignore html files
+*.html
+
+# ignore VSCode files
+.vscode/
+*.code-workspace
