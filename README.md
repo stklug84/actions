@@ -76,6 +76,114 @@ checked out first (`actions/checkout`).
 | `has_glossaries` | Main `.tex` uses glossaries (makeglossaries).            |
 | `has_psfrag`     | Main `.tex` uses psfrag (latex-chain only).              |
 
+## `texlive/build-pdflatex`
+
+Three-pass pdflatex PDF build with bibliography (bibtex/biber), index
+(makeindex), and glossaries (makeglossaries) handling. Fails fast when psfrag
+is required (psfrag needs `texlive/build-latex-chain`). Requires a TeX Live
+toolchain on PATH (e.g. the `texlive/texlive` container) and a checked-out
+workspace. Pair with `texlive/detect`.
+
+```yaml
+- uses: stklug84/actions/texlive/build-pdflatex@v1
+  with:
+    main: book
+    has-bib:        ${{ needs.detect.outputs.has_bib }}
+    has-biblatex:   ${{ needs.detect.outputs.has_biblatex }}
+    has-index:      ${{ needs.detect.outputs.has_index }}
+    has-glossaries: ${{ needs.detect.outputs.has_glossaries }}
+    has-psfrag:     ${{ needs.detect.outputs.has_psfrag }}
+```
+
+| Input            | Default   | Description                                                  |
+|------------------|-----------|--------------------------------------------------------------|
+| `main`           | —         | Main document basename without `.tex`. Required.             |
+| `has-bib`        | `"false"` | Run BibTeX.                                                  |
+| `has-biblatex`   | `"false"` | Run biber (takes precedence over `has-bib`).                 |
+| `has-index`      | `"false"` | Run makeindex when an `.idx` file is produced.               |
+| `has-glossaries` | `"false"` | Run makeglossaries.                                          |
+| `has-psfrag`     | `"false"` | `true` → hard error (pdflatex cannot process psfrag).        |
+
+## `texlive/build-latex-chain`
+
+Three-pass latex PDF build followed by `dvips -Ppdf -G0` and
+`ps2pdf -dPDFSETTINGS=/prepress`, with the same bibliography / index /
+glossaries handling as `texlive/build-pdflatex`. The only engine that supports
+psfrag substitutions (performed by dvips). Same inputs as
+`texlive/build-pdflatex`; `has-psfrag` is informational only.
+
+```yaml
+- uses: stklug84/actions/texlive/build-latex-chain@v1
+  with:
+    main: book
+    has-glossaries: "true"
+```
+
+## `texlive/build-epub`
+
+Build an EPUB 3 with tex4ebook: installs poppler-utils/zip tools, optionally
+stages TeX Live-shipped OTF fonts (via kpsewhich) plus a license file,
+optionally rasterizes a PDF to PNG, writes `.xbb` bounding-box sidecars for
+**every** png/jpg/jpeg under `images-dir` (DVI-mode htlatex cannot measure
+raster images natively), runs tex4ebook, and patches the result (assets
+injected under `OEBPS/`, OPF manifest entries generated dynamically, empty
+`<title>` elements backfilled, EPUB rebuilt with the mandated zip layout).
+
+```yaml
+- uses: stklug84/actions/texlive/build-epub@v1
+  with:
+    main: book
+    config: config/ebook.cfg
+    build-file: config/ebook.mk4
+    rasterize-pdf: images/map.pdf
+    fonts: |
+      EBGaramond-Regular.otf
+      EBGaramond-Italic.otf
+      EBGaramond-Bold.otf
+      EBGaramond-BoldItalic.otf
+    font-license: config/OFL-EBGaramond.txt
+    stylesheet: config/ebook.css
+    book-title: "The Ember Crown"
+```
+
+| Input           | Default            | Description                                                  |
+|-----------------|--------------------|--------------------------------------------------------------|
+| `main`          | —                  | Main document basename without `.tex`. Required.             |
+| `config`        | `config/ebook.cfg` | tex4ht config (`--config`). Empty → omitted.                 |
+| `build-file`    | `config/ebook.mk4` | make4ht build file (`--build-file`). Empty → omitted.        |
+| `format`        | `epub3`            | tex4ebook output format.                                     |
+| `images-dir`    | `images`           | Directory scanned for raster images (extractbb sidecars).    |
+| `rasterize-pdf` | `""`               | PDF rasterized to a sibling PNG before the build.            |
+| `rasterize-dpi` | `300`              | Rasterization resolution.                                    |
+| `fonts`         | `""`               | Newline list of TeX Live OTF names staged via kpsewhich.     |
+| `font-license`  | `""`               | License text bundled as `OFL.txt` next to the fonts.         |
+| `fonts-dir`     | `fonts`            | Workspace staging directory for the fonts.                   |
+| `stylesheet`    | `""`               | CSS injected under `OEBPS/` and declared in the manifest.    |
+| `book-title`    | `""`               | Backfill for empty `<title>` elements (epubcheck RSC-005).   |
+
+## `texlive/validate-epub`
+
+Validate an EPUB with a pinned epubcheck release (installing a headless JRE),
+then strip build by-products from the workspace via `git clean -fdx` while
+preserving the build outputs. Cleanup only runs after a successful validation,
+so failures leave the workspace intact for log collection (e.g. via
+`texlive/upload-build-logs`).
+
+```yaml
+- uses: stklug84/actions/texlive/validate-epub@v1
+  with:
+    main: book
+    filter-file: config/epubcheck-filter.txt
+```
+
+| Input               | Default   | Description                                                 |
+|---------------------|-----------|-------------------------------------------------------------|
+| `main`              | —         | Main document basename without `.epub`. Required.           |
+| `epubcheck-version` | `"5.1.0"` | epubcheck release to install.                               |
+| `filter-file`       | `""`      | Optional `--customMessages` file (applied when it exists).  |
+| `clean`             | `"true"`  | Clean the workspace after successful validation.            |
+| `keep`              | `""`      | Newline list of files preserved. Empty → `<main>.epub` + `<main>.pdf`. |
+
 ## `texlive/upload-build-logs`
 
 Upload matching log files as a workflow artifact. Intended for `if: failure()`
