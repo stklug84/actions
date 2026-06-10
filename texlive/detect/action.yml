@@ -1,0 +1,171 @@
+# Composite action: detect TeX Live build configuration.
+#
+# Resolves the build inputs (engine, local-mode flag, main document
+# basename) and scans the main .tex for auxiliary toolchain requirements
+# (bibtex/biblatex, makeindex, glossaries, psfrag). Downstream jobs
+# consume the outputs so the detection logic lives in exactly one place.
+#
+# The caller MUST run actions/checkout before this action: detection
+# greps the repository's .tex files in the workspace.
+#
+# Usage:
+#   - uses: actions/checkout@v6
+#   - id: detect
+#     uses: stklug84/actions/texlive/detect@v1
+#     with:
+#       engine: ""     # optional; empty → default-engine
+#       local: ""      # optional; empty → auto-detect via ACT env
+#       main-tex: ""   # optional; empty → auto-detect via \documentclass
+name: Detect TeX Live build configuration
+description: >-
+  Resolve engine / local-mode / main-document inputs and scan the main
+  .tex for bibtex/biblatex, makeindex, glossaries, and psfrag usage.
+
+inputs:
+  engine:
+    description: >-
+      LaTeX toolchain to use (latexmk, pdflatex, latex-chain). Leave
+      empty to fall back to default-engine.
+    required: false
+    default: ""
+  default-engine:
+    description: Engine used when `engine` is empty.
+    required: false
+    default: "latexmk"
+  local:
+    description: >-
+      Set to 'true' when running locally via gh act. Leave empty to
+      auto-detect from the ACT environment variable (falls back to
+      'false').
+    required: false
+    default: ""
+  main-tex:
+    description: >-
+      Main document basename without .tex. Leave empty to auto-detect
+      the first repo-root .tex containing \documentclass.
+    required: false
+    default: ""
+
+outputs:
+  main:
+    description: Main document basename (without .tex).
+    value: ${{ steps.main.outputs.main }}
+  local:
+    description: Whether the run is in local (gh act) mode.
+    value: ${{ steps.cfg.outputs.local }}
+  engine:
+    description: Resolved LaTeX toolchain.
+    value: ${{ steps.cfg.outputs.engine }}
+  has_bib:
+    description: Whether the main .tex uses BibTeX (\bibliography{...}).
+    value: ${{ steps.aux.outputs.has_bib }}
+  has_biblatex:
+    description: Whether the main .tex loads biblatex (biber backend).
+    value: ${{ steps.aux.outputs.has_biblatex }}
+  has_index:
+    description: Whether the main .tex builds an index (makeindex).
+    value: ${{ steps.aux.outputs.has_index }}
+  has_glossaries:
+    description: Whether the main .tex uses glossaries (makeglossaries).
+    value: ${{ steps.aux.outputs.has_glossaries }}
+  has_psfrag:
+    description: Whether the main .tex uses psfrag (latex-chain only).
+    value: ${{ steps.aux.outputs.has_psfrag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve inputs
+      id: cfg
+      shell: bash
+      env:
+        # On non-dispatch events the caller passes empty strings and we
+        # fall back to the default engine / the ACT auto-detect below.
+        ENGINE_IN: ${{ inputs.engine }}
+        LOCAL_IN: ${{ inputs.local }}
+        DEFAULT_ENGINE: ${{ inputs.default-engine }}
+      run: |
+        set -euo pipefail
+        ENGINE="${ENGINE_IN:-$DEFAULT_ENGINE}"
+        # nektos/act exports ACT=true; treat that as implicit local mode.
+        LOCAL="${LOCAL_IN:-${ACT:+true}}"
+        LOCAL="${LOCAL:-false}"
+        echo "engine=$ENGINE" >> "$GITHUB_OUTPUT"
+        echo "local=$LOCAL"   >> "$GITHUB_OUTPUT"
+        echo "Resolved engine=$ENGINE local=$LOCAL (ACT=${ACT:-unset})"
+
+    - name: Detect main LaTeX document
+      id: main
+      shell: bash
+      env:
+        MAIN_IN: ${{ inputs.main-tex }}
+      run: |
+        set -euo pipefail
+        MAIN="${MAIN_IN:-}"
+        if [ -z "$MAIN" ]; then
+          # Auto-detect: pick the first repo-root .tex with \documentclass.
+          MAIN_FILE="$(grep -l '^\s*\\documentclass' ./*.tex 2>/dev/null | head -n1 || true)"
+          if [ -z "$MAIN_FILE" ]; then
+            echo "::error::No main .tex file (containing \\documentclass) found in repo root."
+            exit 1
+          fi
+          MAIN="$(basename "$MAIN_FILE" .tex)"
+        fi
+        echo "main=$MAIN" >> "$GITHUB_OUTPUT"
+        echo "Main document: ${MAIN}.tex"
+
+    - name: Detect auxiliary inputs (bib / idx / glossaries / psfrag)
+      id: aux
+      shell: bash
+      env:
+        MAIN: ${{ steps.main.outputs.main }}
+      run: |
+        set -euo pipefail
+        TEX="${MAIN}.tex"
+
+        HAS_BIB="false"
+        HAS_BIBLATEX="false"
+        HAS_INDEX="false"
+        HAS_GLOSSARIES="false"
+        HAS_PSFRAG="false"
+
+        # Bibliography: BibTeX (\bibliography{...}) vs biblatex/biber.
+        if grep -Eq '\\bibliography\{' "$TEX"; then
+          HAS_BIB="true"
+        fi
+        if grep -Eq '\\usepackage(\[[^]]*\])?\{biblatex\}' "$TEX"; then
+          HAS_BIBLATEX="true"
+        fi
+
+        # Index (makeindex).
+        INDEX_RE='\\makeindex|\\printindex'
+        INDEX_RE="$INDEX_RE|\\\\usepackage(\[[^]]*\])?\{makeidx\}"
+        INDEX_RE="$INDEX_RE|\\\\usepackage(\[[^]]*\])?\{imakeidx\}"
+        if grep -Eq "$INDEX_RE" "$TEX"; then
+          HAS_INDEX="true"
+        fi
+
+        # Glossaries (makeglossaries).
+        if grep -Eq '\\usepackage(\[[^]]*\])?\{glossaries\}|\\makeglossaries' "$TEX"; then
+          HAS_GLOSSARIES="true"
+        fi
+
+        # psfrag: only relevant for the latex->dvips->ps2pdf chain.
+        if grep -Eq '\\usepackage(\[[^]]*\])?\{psfrag\}|\\psfrag\{' "$TEX"; then
+          HAS_PSFRAG="true"
+        fi
+
+        {
+          echo "has_bib=$HAS_BIB"
+          echo "has_biblatex=$HAS_BIBLATEX"
+          echo "has_index=$HAS_INDEX"
+          echo "has_glossaries=$HAS_GLOSSARIES"
+          echo "has_psfrag=$HAS_PSFRAG"
+        } >> "$GITHUB_OUTPUT"
+
+        echo "Detected:"
+        echo "  bibtex     : $HAS_BIB"
+        echo "  biblatex   : $HAS_BIBLATEX"
+        echo "  index      : $HAS_INDEX"
+        echo "  glossaries : $HAS_GLOSSARIES"
+        echo "  psfrag     : $HAS_PSFRAG"
