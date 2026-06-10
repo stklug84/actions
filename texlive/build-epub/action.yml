@@ -1,0 +1,408 @@
+# Composite action: build an EPUB with tex4ebook.
+#
+# Installs the rasterization toolchain (poppler-utils, zip/unzip),
+# optionally stages TeX Live-shipped OTF fonts (resolved via kpsewhich)
+# plus a license file, optionally rasterizes a PDF to PNG (for EPUB
+# embedding), writes .xbb bounding-box sidecars for every raster image
+# in the images directory (htlatex runs latex in DVI mode, which cannot
+# natively measure PNG/JPEG dimensions), builds the EPUB with
+# tex4ebook, and patches the result: staged fonts and stylesheet are
+# injected under OEBPS/, the OPF manifest is amended dynamically for
+# every injected asset, and empty <title> elements are backfilled.
+#
+# Requires a TeX Live toolchain on PATH (e.g. the texlive/texlive
+# container), apt-get (Debian-based image), and a checked-out
+# workspace. Pair with texlive/detect to resolve `main` and with
+# texlive/validate-epub for epubcheck validation and workspace cleanup.
+#
+# Usage:
+#   - uses: stklug84/actions/texlive/build-epub@v1
+#     with:
+#       main: book
+#       config: config/ebook.cfg
+#       build-file: config/ebook.mk4
+#       images-dir: images
+#       rasterize-pdf: images/map.pdf
+#       fonts: |
+#         EBGaramond-Regular.otf
+#         EBGaramond-Italic.otf
+#       font-license: config/OFL-EBGaramond.txt
+#       stylesheet: config/ebook.css
+#       book-title: "My Book"
+name: Build EPUB with tex4ebook
+description: >-
+  Build an EPUB 3 with tex4ebook, including optional font staging,
+  PDF-to-PNG rasterization, generic bounding-box extraction for raster
+  images, and post-build OPF manifest / asset patching.
+
+inputs:
+  main:
+    description: Main document basename without .tex.
+    required: true
+  config:
+    description: tex4ht config file passed via --config. Empty → omitted.
+    required: false
+    default: "config/ebook.cfg"
+  build-file:
+    description: make4ht build file passed via --build-file. Empty → omitted.
+    required: false
+    default: "config/ebook.mk4"
+  format:
+    description: tex4ebook output format.
+    required: false
+    default: "epub3"
+  images-dir:
+    description: >-
+      Directory scanned for raster images (png/jpg/jpeg). Every match
+      gets an .xbb bounding-box sidecar via extractbb so DVI-mode
+      htlatex can measure it.
+    required: false
+    default: "images"
+  rasterize-pdf:
+    description: >-
+      Optional PDF rasterized to a sibling PNG (same basename) before
+      the build, e.g. images/map.pdf -> images/map.png. Empty → skipped.
+    required: false
+    default: ""
+  rasterize-dpi:
+    description: Resolution for the PDF rasterization.
+    required: false
+    default: "300"
+  fonts:
+    description: >-
+      Newline-separated list of OTF font filenames shipped by TeX Live,
+      resolved via kpsewhich and staged under fonts-dir (and later
+      injected into the EPUB). Empty → no font staging.
+    required: false
+    default: ""
+  font-license:
+    description: >-
+      Path to the font license text bundled alongside the staged fonts
+      (e.g. the SIL OFL, to satisfy OFL section 4 attribution). Staged
+      as OFL.txt. Empty → skipped.
+    required: false
+    default: ""
+  fonts-dir:
+    description: Workspace directory the fonts are staged into.
+    required: false
+    default: "fonts"
+  stylesheet:
+    description: >-
+      Hand-written CSS file injected under OEBPS/ and declared in the
+      OPF manifest. Empty → skipped.
+    required: false
+    default: ""
+  book-title:
+    description: >-
+      Title used to backfill empty <title> elements in XHTML content
+      documents (tex4ht emits them for split files that precede the
+      first heading; epubcheck flags them as fatal RSC-005). Empty →
+      backfill skipped.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # pdftoppm rasterizes PDFs for EPUB embedding; zip/unzip drive the
+    # post-build asset-injection step below.
+    - name: Install poppler-utils and zip tools
+      shell: bash
+      run: |
+        set -euo pipefail
+        apt-get update -qq
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          poppler-utils \
+          unzip \
+          zip \
+          ca-certificates
+        pdftoppm -v 2>&1 | head -n1 || true
+
+    # Resolve OTFs shipped by TeX Live via kpsewhich and stage them
+    # under fonts-dir with filenames matching the @font-face
+    # declarations in the tex4ht config. The license file is bundled
+    # as OFL.txt.
+    - name: Stage fonts
+      shell: bash
+      env:
+        FONTS: ${{ inputs.fonts }}
+        FONT_LICENSE: ${{ inputs.font-license }}
+        FONTS_DIR: ${{ inputs.fonts-dir }}
+      run: |
+        set -euo pipefail
+        if [ -z "${FONTS//[[:space:]]/}" ]; then
+          echo "No fonts requested; skipping font staging."
+          exit 0
+        fi
+        mkdir -p "$FONTS_DIR"
+
+        while IFS= read -r name; do
+          name="$(echo "$name" | xargs)"   # trim
+          [ -z "$name" ] && continue
+          src="$(kpsewhich "$name" || true)"
+          if [ -z "$src" ] || [ ! -f "$src" ]; then
+            echo "::error::Could not locate $name via kpsewhich."
+            exit 1
+          fi
+          echo "Found $name at $src"
+          cp "$src" "$FONTS_DIR/$name"
+        done <<< "$FONTS"
+
+        if [ -n "$FONT_LICENSE" ]; then
+          if [ ! -f "$FONT_LICENSE" ]; then
+            echo "::error::Font license file $FONT_LICENSE is missing."
+            exit 1
+          fi
+          cp "$FONT_LICENSE" "$FONTS_DIR/OFL.txt"
+          echo "Bundled OFL.txt from $FONT_LICENSE"
+        fi
+
+        ls -la "$FONTS_DIR/"
+
+    # Single source of truth: the vector PDF. The EPUB embeds the PNG
+    # produced here. -singlefile yields <basename>.png (no -1 suffix).
+    - name: Rasterize PDF to PNG
+      shell: bash
+      env:
+        RASTERIZE_PDF: ${{ inputs.rasterize-pdf }}
+        RASTERIZE_DPI: ${{ inputs.rasterize-dpi }}
+      run: |
+        set -euo pipefail
+        if [ -z "$RASTERIZE_PDF" ]; then
+          echo "No rasterize-pdf input; skipping rasterization."
+          exit 0
+        fi
+        if [ ! -f "$RASTERIZE_PDF" ]; then
+          echo "::error::$RASTERIZE_PDF is required for the EPUB build."
+          exit 1
+        fi
+        out="${RASTERIZE_PDF%.pdf}"
+        pdftoppm -png -r "$RASTERIZE_DPI" -f 1 -l 1 -singlefile \
+          "$RASTERIZE_PDF" "$out"
+        ls -la "$out.png"
+
+    # htlatex (the engine driving tex4ebook) runs latex in DVI mode,
+    # which cannot natively measure raster image dimensions. extractbb
+    # (shipped with TeX Live as part of dvipdfmx) writes an .xbb
+    # sidecar that graphicx reads to size the image. Without it,
+    # htlatex emits:
+    #   LaTeX Error: Cannot determine size of graphic in <image>
+    #                (no BoundingBox).
+    # pdfLaTeX measures raster dimensions natively and does not need
+    # the sidecar; stray .xbb files are harmless. Every png/jpg/jpeg
+    # under images-dir is processed so newly added images are covered
+    # without workflow changes.
+    - name: Extract bounding boxes for raster images
+      shell: bash
+      env:
+        IMAGES_DIR: ${{ inputs.images-dir }}
+      run: |
+        set -euo pipefail
+        if [ ! -d "$IMAGES_DIR" ]; then
+          echo "Images directory $IMAGES_DIR does not exist; skipping."
+          exit 0
+        fi
+        count=0
+        while IFS= read -r -d '' img; do
+          extractbb "$img"
+          echo "Wrote bounding box for $img"
+          count=$((count + 1))
+        done < <(find "$IMAGES_DIR" -type f \
+                   \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) \
+                   -print0)
+        echo "Bounding boxes written: $count"
+        if [ "$count" -gt 0 ]; then
+          find "$IMAGES_DIR" -type f -name '*.xbb' -exec ls -l {} +
+        fi
+
+    # tex4ebook drives tex4ht using the config file for CSS hooks and
+    # the build file for the build sequence and asset copying.
+    #
+    # WARNING: do NOT add `-e copy_assets` or any other `-e <name>`
+    # flag here. In tex4ebook (unlike make4ht extensions, which use
+    # `-f epub3+name`), the `-e` short option is bound to
+    # `--build-file` (see the lapp option block in the tex4ebook
+    # script, line 47). Passing both `--build-file <file>` and
+    # `-e <name>` makes lapp use the last value, silently overriding
+    # the build file with a non-existent path. tex4ebook then falls
+    # back to its default Make:autohtlatex() sequence, which contains
+    # no makeglossaries step -- producing an EPUB whose glossary
+    # chapter is empty and whose cross-page links fail epubcheck
+    # RSC-012.
+    - name: Build EPUB with tex4ebook
+      shell: bash
+      env:
+        MAIN: ${{ inputs.main }}
+        FORMAT: ${{ inputs.format }}
+        CONFIG: ${{ inputs.config }}
+        BUILD_FILE: ${{ inputs.build-file }}
+      run: |
+        set -euo pipefail
+        args=(--format "$FORMAT")
+        if [ -n "$CONFIG" ]; then
+          args+=(--config "$CONFIG")
+        fi
+        if [ -n "$BUILD_FILE" ]; then
+          args+=(--build-file "$BUILD_FILE")
+        fi
+        tex4ebook "${args[@]}" "$MAIN.tex"
+
+        if [ ! -s "$MAIN.epub" ]; then
+          echo "::error::tex4ebook did not produce $MAIN.epub."
+          exit 1
+        fi
+        ls -la "$MAIN.epub"
+
+    # Patch the EPUB to ensure (a) the staged fonts and stylesheet are
+    # present under OEBPS/ and (b) every injected asset is listed in
+    # the OPF manifest (otherwise epubcheck flags RSC-008 / OPF-014).
+    # Manifest entries are generated dynamically from the files
+    # actually injected, so the asset list lives in the inputs above
+    # rather than in hardcoded markup. Empty <title> elements are
+    # backfilled with book-title (RSC-005). The EPUB is then rebuilt
+    # with the EPUB-mandated layout (uncompressed `mimetype` first,
+    # everything else DEFLATED). All patching is idempotent.
+    - name: Patch EPUB with assets and OPF manifest entries
+      shell: bash
+      env:
+        MAIN: ${{ inputs.main }}
+        FONTS_DIR: ${{ inputs.fonts-dir }}
+        STYLESHEET: ${{ inputs.stylesheet }}
+        BOOK_TITLE: ${{ inputs.book-title }}
+      run: |
+        set -euo pipefail
+
+        tmpdir="$(mktemp -d)"
+        unzip -q "$MAIN.epub" -d "$tmpdir"
+
+        # (a) Stage assets under OEBPS/. This is the authoritative
+        # asset-staging step (a make4ht build file generally does NOT
+        # copy these; see the `-e`/--build-file warning above). The
+        # presence checks keep the operation idempotent across re-runs.
+        # `injected` records "href|media-type" pairs for the manifest
+        # patch below.
+        injected=()
+
+        if [ -d "$FONTS_DIR" ] && compgen -G "$FONTS_DIR/*" > /dev/null; then
+          mkdir -p "$tmpdir/OEBPS/fonts"
+          for f in "$FONTS_DIR"/*; do
+            base="$(basename "$f")"
+            case "$base" in
+              *.otf) mt="application/font-sfnt" ;;
+              *.ttf) mt="application/font-sfnt" ;;
+              *.txt) mt="text/plain" ;;
+              *)     echo "Skipping unrecognized font asset $base"; continue ;;
+            esac
+            if [ ! -f "$tmpdir/OEBPS/fonts/$base" ]; then
+              echo "Staging $base under OEBPS/fonts/."
+              cp "$f" "$tmpdir/OEBPS/fonts/$base"
+            else
+              echo "$base already present under OEBPS/fonts/; skipping copy."
+            fi
+            injected+=("fonts/$base|$mt")
+          done
+        fi
+
+        if [ -n "$STYLESHEET" ]; then
+          base="$(basename "$STYLESHEET")"
+          if [ ! -f "$tmpdir/OEBPS/$base" ]; then
+            echo "Staging $STYLESHEET under OEBPS/."
+            cp "$STYLESHEET" "$tmpdir/OEBPS/$base"
+          else
+            echo "$base already present under OEBPS/; skipping copy."
+          fi
+          injected+=("$base|text/css")
+        fi
+
+        # (b) Patch content.opf so every injected asset is declared in
+        # the package manifest. Idempotent: assets whose href is
+        # already referenced are not added again.
+        if [ "${#injected[@]}" -gt 0 ]; then
+          opf="$(find "$tmpdir" -name content.opf -print -quit)"
+          if [ -z "$opf" ] || [ ! -f "$opf" ]; then
+            echo "::error::content.opf not found in EPUB."
+            exit 1
+          fi
+          if ! grep -q '</manifest>' "$opf"; then
+            echo "::error::</manifest> not found in $opf"
+            exit 1
+          fi
+
+          items_file="$(mktemp)"
+          for entry in "${injected[@]}"; do
+            href="${entry%%|*}"
+            mt="${entry##*|}"
+            if grep -q "href=\"$href\"" "$opf"; then
+              echo "OPF manifest already references $href; not patched."
+              continue
+            fi
+            # Derive a manifest id from the href (slashes and dots are
+            # not valid in NCNames).
+            id="asset-$(printf '%s' "$href" | tr '/.' '--')"
+            printf '    <item id="%s" href="%s" media-type="%s"/>\n' \
+              "$id" "$href" "$mt" >> "$items_file"
+          done
+
+          if [ -s "$items_file" ]; then
+            echo "Patching OPF manifest at $opf"
+            cat "$items_file"
+            # awk handles multi-line insertions cleanly; the items are
+            # emitted immediately before the first </manifest>.
+            tmp_opf="$(mktemp)"
+            awk -v itemsfile="$items_file" '
+              /<\/manifest>/ && !done {
+                while ((getline line < itemsfile) > 0) print line
+                close(itemsfile)
+                done = 1
+              }
+              { print }
+            ' "$opf" > "$tmp_opf"
+            mv "$tmp_opf" "$opf"
+          else
+            echo "OPF manifest already up to date."
+          fi
+          rm -f "$items_file"
+        fi
+
+        # (c) Backfill any empty <title></title> elements in XHTML
+        # content documents. tex4ht populates the HTML <title> from
+        # the nearest heading, but split files that precede the first
+        # heading are emitted with <title></title>. epubcheck reports
+        # this as RSC-005 ERROR (Element "title" must not be empty),
+        # which is fatal. The sed pattern matches `<title></title>`
+        # and `<title>  </title>` (any in-line whitespace); empty
+        # <title> elements emitted by tex4ht are always confined to a
+        # single line. Idempotent: documents whose <title> already
+        # contains non-whitespace text are not modified.
+        if [ -n "$BOOK_TITLE" ]; then
+          # Escape sed replacement metacharacters (&, \, delimiter |).
+          title_esc="$(printf '%s' "$BOOK_TITLE" | sed -e 's/[&\\|]/\\&/g')"
+          patched_count=0
+          while IFS= read -r -d '' xhtml; do
+            if grep -qE '<title>[[:space:]]*</title>' "$xhtml"; then
+              sed -i -E "s|<title>[[:space:]]*</title>|<title>${title_esc}</title>|" "$xhtml"
+              echo "Backfilled empty <title> in ${xhtml#"$tmpdir"/}"
+              patched_count=$((patched_count + 1))
+            fi
+          done < <(find "$tmpdir" -type f -name '*.xhtml' -print0)
+          echo "Total XHTML files patched for empty <title>: $patched_count"
+        fi
+
+        # Rebuild the EPUB. EPUB spec: `mimetype` must be the first
+        # entry, STORED (no compression), no extra fields; everything
+        # else DEFLATED.
+        rm -f "$MAIN.epub"
+        (
+          cd "$tmpdir"
+          zip -X0  "$OLDPWD/$MAIN.epub" mimetype
+          zip -rX9 "$OLDPWD/$MAIN.epub" . -x mimetype
+        )
+        rm -rf "$tmpdir"
+
+        if [ "${#injected[@]}" -gt 0 ]; then
+          unzip -l "$MAIN.epub" | grep -E 'OEBPS/(fonts/|.*\.css)' || {
+            echo "::error::Asset injection failed; staged assets missing from EPUB."
+            exit 1
+          }
+        fi
+        ls -la "$MAIN.epub"

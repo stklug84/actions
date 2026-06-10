@@ -1,0 +1,111 @@
+# Composite action: build a PDF via the classic latex -> dvips ->
+# ps2pdf chain.
+#
+# Runs latex pass 1, the auxiliary tools selected by the has-* inputs
+# (biber/bibtex, makeindex, makeglossaries), passes 2 + 3, then converts
+# DVI -> PS (where psfrag substitutions are performed) -> PDF. This is
+# the only engine that supports psfrag.
+#
+# Requires a TeX Live toolchain on PATH (e.g. the texlive/texlive
+# container) and a checked-out workspace. Pair with texlive/detect to
+# resolve the inputs.
+#
+# Usage:
+#   - uses: stklug84/actions/texlive/build-latex-chain@v1
+#     with:
+#       main: book
+#       has-bib:        ${{ needs.detect.outputs.has_bib }}
+#       has-biblatex:   ${{ needs.detect.outputs.has_biblatex }}
+#       has-index:      ${{ needs.detect.outputs.has_index }}
+#       has-glossaries: ${{ needs.detect.outputs.has_glossaries }}
+#       has-psfrag:     ${{ needs.detect.outputs.has_psfrag }}
+name: Build PDF with latex-chain
+description: >-
+  Three-pass latex build followed by dvips and ps2pdf, with
+  bibliography (bibtex/biber), index (makeindex), and glossaries
+  (makeglossaries) handling. Supports psfrag substitutions.
+
+inputs:
+  main:
+    description: Main document basename without .tex.
+    required: true
+  has-bib:
+    description: Run BibTeX (\bibliography{...} detected).
+    required: false
+    default: "false"
+  has-biblatex:
+    description: Run biber (biblatex detected; takes precedence over has-bib).
+    required: false
+    default: "false"
+  has-index:
+    description: Run makeindex when an .idx file is produced.
+    required: false
+    default: "false"
+  has-glossaries:
+    description: Run makeglossaries.
+    required: false
+    default: "false"
+  has-psfrag:
+    description: >-
+      Whether psfrag is used. Informational only: dvips performs the
+      substitutions as part of the normal chain.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Build with latex -> dvips -> ps2pdf
+      shell: bash
+      env:
+        MAIN: ${{ inputs.main }}
+        HAS_BIB: ${{ inputs.has-bib }}
+        HAS_BIBLATEX: ${{ inputs.has-biblatex }}
+        HAS_INDEX: ${{ inputs.has-index }}
+        HAS_GLOSSARIES: ${{ inputs.has-glossaries }}
+        HAS_PSFRAG: ${{ inputs.has-psfrag }}
+      run: |
+        set -euo pipefail
+
+        if [ "$HAS_BIBLATEX" = "true" ]; then
+          echo "::warning::biblatex detected; using biber. Ensure backend=biber in your preamble."
+        fi
+
+        # Pass 1.
+        latex -interaction=nonstopmode -halt-on-error "$MAIN.tex"
+
+        # Bibliography: tolerate "no citations" warnings (exit 1) but
+        # fail on real errors (>=2).
+        if [ "$HAS_BIBLATEX" = "true" ]; then
+          biber "$MAIN" || { rc=$?; [ "$rc" -ge 2 ] && exit "$rc"; }
+        elif [ "$HAS_BIB" = "true" ]; then
+          bibtex "$MAIN" || { rc=$?; [ "$rc" -ge 2 ] && exit "$rc"; }
+        fi
+
+        # Index.
+        if [ "$HAS_INDEX" = "true" ] && [ -f "$MAIN.idx" ]; then
+          makeindex "$MAIN.idx"
+        fi
+
+        # Glossaries: tolerate missing glossary files but surface real failures.
+        if [ "$HAS_GLOSSARIES" = "true" ]; then
+          makeglossaries "$MAIN" || { rc=$?; [ "$rc" -ge 2 ] && exit "$rc"; }
+        fi
+
+        # Pass 2 + 3 to resolve refs / TOC / index / bibliography.
+        latex -interaction=nonstopmode -halt-on-error "$MAIN.tex"
+        latex -interaction=nonstopmode -halt-on-error "$MAIN.tex"
+
+        # Convert DVI -> PS (where psfrag substitutions are performed)
+        # -> PDF.
+        dvips -Ppdf -G0 -o "$MAIN.ps" "$MAIN.dvi"
+        ps2pdf -dPDFSETTINGS=/prepress "$MAIN.ps" "$MAIN.pdf"
+        if [ "$HAS_PSFRAG" = "true" ]; then
+          echo "psfrag substitutions were processed by dvips."
+        fi
+
+        if [ ! -s "$MAIN.pdf" ]; then
+          echo "::error::latex-chain build produced no $MAIN.pdf (or it is empty)."
+          exit 1
+        fi
+        ls -la "$MAIN.pdf"

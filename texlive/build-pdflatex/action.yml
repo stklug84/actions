@@ -1,0 +1,107 @@
+# Composite action: build a PDF with the pdflatex three-pass workflow.
+#
+# Runs pdflatex pass 1, the auxiliary tools selected by the has-* inputs
+# (biber/bibtex, makeindex, makeglossaries), then passes 2 + 3 to
+# resolve references / TOC / index / bibliography. Fails fast when
+# psfrag is detected: pdflatex cannot perform psfrag substitutions
+# (use texlive/build-latex-chain instead).
+#
+# Requires a TeX Live toolchain on PATH (e.g. the texlive/texlive
+# container) and a checked-out workspace. Pair with texlive/detect to
+# resolve the inputs.
+#
+# Usage:
+#   - uses: stklug84/actions/texlive/build-pdflatex@v1
+#     with:
+#       main: book
+#       has-bib:        ${{ needs.detect.outputs.has_bib }}
+#       has-biblatex:   ${{ needs.detect.outputs.has_biblatex }}
+#       has-index:      ${{ needs.detect.outputs.has_index }}
+#       has-glossaries: ${{ needs.detect.outputs.has_glossaries }}
+#       has-psfrag:     ${{ needs.detect.outputs.has_psfrag }}
+name: Build PDF with pdflatex
+description: >-
+  Three-pass pdflatex build with bibliography (bibtex/biber), index
+  (makeindex), and glossaries (makeglossaries) handling. Fails when
+  psfrag is required.
+
+inputs:
+  main:
+    description: Main document basename without .tex.
+    required: true
+  has-bib:
+    description: Run BibTeX (\bibliography{...} detected).
+    required: false
+    default: "false"
+  has-biblatex:
+    description: Run biber (biblatex detected; takes precedence over has-bib).
+    required: false
+    default: "false"
+  has-index:
+    description: Run makeindex when an .idx file is produced.
+    required: false
+    default: "false"
+  has-glossaries:
+    description: Run makeglossaries.
+    required: false
+    default: "false"
+  has-psfrag:
+    description: >-
+      Whether psfrag is used. pdflatex cannot process psfrag; when
+      'true' this action fails with a pointer to
+      texlive/build-latex-chain.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Build with pdflatex
+      shell: bash
+      env:
+        MAIN: ${{ inputs.main }}
+        HAS_BIB: ${{ inputs.has-bib }}
+        HAS_BIBLATEX: ${{ inputs.has-biblatex }}
+        HAS_INDEX: ${{ inputs.has-index }}
+        HAS_GLOSSARIES: ${{ inputs.has-glossaries }}
+        HAS_PSFRAG: ${{ inputs.has-psfrag }}
+      run: |
+        set -euo pipefail
+
+        if [ "$HAS_PSFRAG" = "true" ]; then
+          echo "::error::psfrag detected. pdflatex cannot perform psfrag substitutions."
+          echo "::error::psfrag requires the classic latex -> dvips -> ps2pdf chain;"
+          echo "::error::use texlive/build-latex-chain instead."
+          exit 1
+        fi
+
+        # Pass 1.
+        pdflatex -interaction=nonstopmode -halt-on-error "$MAIN.tex"
+
+        # Bibliography: tolerate "no citations" warnings (exit 1) but
+        # fail on real errors (>=2).
+        if [ "$HAS_BIBLATEX" = "true" ]; then
+          biber "$MAIN" || { rc=$?; [ "$rc" -ge 2 ] && exit "$rc"; }
+        elif [ "$HAS_BIB" = "true" ]; then
+          bibtex "$MAIN" || { rc=$?; [ "$rc" -ge 2 ] && exit "$rc"; }
+        fi
+
+        # Index.
+        if [ "$HAS_INDEX" = "true" ] && [ -f "$MAIN.idx" ]; then
+          makeindex "$MAIN.idx"
+        fi
+
+        # Glossaries: tolerate missing glossary files but surface real failures.
+        if [ "$HAS_GLOSSARIES" = "true" ]; then
+          makeglossaries "$MAIN" || { rc=$?; [ "$rc" -ge 2 ] && exit "$rc"; }
+        fi
+
+        # Pass 2 + 3 to resolve refs / TOC / index / bibliography.
+        pdflatex -interaction=nonstopmode -halt-on-error "$MAIN.tex"
+        pdflatex -interaction=nonstopmode -halt-on-error "$MAIN.tex"
+
+        if [ ! -s "$MAIN.pdf" ]; then
+          echo "::error::pdflatex build produced no $MAIN.pdf (or it is empty)."
+          exit 1
+        fi
+        ls -la "$MAIN.pdf"
