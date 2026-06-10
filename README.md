@@ -58,12 +58,12 @@ checked out first (`actions/checkout`).
     main-tex: ""   # optional; empty → auto-detect via \documentclass
 ```
 
-| Input            | Default     | Description                                                        |
-|------------------|-------------|--------------------------------------------------------------------|
+| Input            | Default     | Description                                                                       |
+|------------------|-------------|-----------------------------------------------------------------------------------|
 | `engine`         | `""`        | LaTeX toolchain (`latexmk`, `pdflatex`, `latex-chain`). Empty → `default-engine`. |
-| `default-engine` | `"latexmk"` | Engine used when `engine` is empty.                                |
-| `local`          | `""`        | Local (gh act) mode. Empty → auto-detect via `ACT` env, else `false`. |
-| `main-tex`       | `""`        | Main document basename without `.tex`. Empty → auto-detect via `\documentclass`. |
+| `default-engine` | `"latexmk"` | Engine used when `engine` is empty.                                               |
+| `local`          | `""`        | Local (gh act) mode. Empty → auto-detect via `ACT` env, else `false`.             |
+| `main-tex`       | `""`        | Main document basename without `.tex`. Empty → auto-detect via `\documentclass`.  |
 
 | Output           | Description                                              |
 |------------------|----------------------------------------------------------|
@@ -97,6 +97,28 @@ silently skipped.
 |-----------------|---------|---------------------------------------------------|
 | `artifact-name` | —       | Name of the artifact to upload. Required.         |
 | `paths`         | —       | Newline-separated glob list of files. Required.   |
+
+## Linting
+
+Pull requests against `main` run the `Lint` workflow
+(`.github/workflows/lint.yml`):
+
+- **actionlint** — validates `.github/workflows/*` (including shellcheck on
+  workflow `run:` steps).
+- **shellcheck** — checks the bash `run:` blocks inside the composite
+  `action.yml` files via `scripts/shellcheck-actions.sh` (actionlint does not
+  cover composite actions). Rules: `.shellcheckrc`.
+- **yamllint** — lints all YAML files. Rules: `.yamllint.yml`.
+- **markdownlint** — lints all Markdown files. Rules: `.markdownlint.yaml`.
+
+Run locally (requires `shellcheck`, `yq`, `yamllint`, `actionlint`, `npx`):
+
+```bash
+actionlint
+scripts/shellcheck-actions.sh
+yamllint --strict .
+npx markdownlint-cli2 --config .markdownlint.yaml '**/*.md'
+```
 
 ## Versioning
 

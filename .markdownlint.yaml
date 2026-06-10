@@ -1,0 +1,36 @@
+---
+# title: Markdownlint rules configuration
+# authors:
+#   - Steffen Klug <45033201+stklug84@users.noreply.github.com>
+# date: 2023-02-16
+# keywords: [infrastructure, linting]
+# comment: |
+#   Markdownlint configuration definition
+# ---
+
+# Example markdownlint YAML configuration with all properties set to their default value
+# ------------------------------------------------------------------------------
+# List of deviations from the default:
+# - MD010 Hard Tabs in code blocks has been disabled
+# - MD013 Line length is not enforced for tables
+# ------------------------------------------------------------------------------
+
+# Default state for all rules
+default: true
+
+# Path to configuration file to extend
+extends: null
+
+# MD013/line-length - Line length
+MD013:
+  # Exclude tables from the line-length check
+  tables: false
+
+# MD010/no-hard-tabs - Hard tabs
+MD010:
+  # Include code blocks
+  code_blocks: false
+  # Fenced code languages to ignore
+  ignore_code_languages: []
+  # Number of spaces for each hard tab
+  spaces_per_tab: 1
