@@ -1,0 +1,36 @@
+# Composite action: upload TeX Live build logs as a workflow artifact.
+#
+# Intended to be invoked from an `if: failure()` step so log archives
+# are produced only on failed runs. Missing files are silently skipped.
+#
+# Usage:
+#   - name: Upload build logs on failure
+#     if: failure()
+#     uses: stklug84/actions/texlive/upload-build-logs@v1
+#     with:
+#       artifact-name: build-logs
+#       paths: |
+#         *.log
+#         *.blg
+name: Upload build logs
+description: >-
+  Uploads matching log files as a workflow artifact. Intended to be
+  invoked from an `if: failure()` step so log archives are produced
+  only on failed runs. Missing files are silently skipped.
+
+inputs:
+  artifact-name:
+    description: Name of the artifact to upload.
+    required: true
+  paths:
+    description: Newline-separated glob list of log files to collect.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.paths }}
+        if-no-files-found: ignore
