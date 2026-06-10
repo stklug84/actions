@@ -1,0 +1,165 @@
+---
+# Composite action: validate an EPUB with epubcheck and clean the
+# workspace.
+#
+# Installs a headless JRE and the pinned epubcheck release, validates
+# the EPUB (optionally downgrading cosmetic findings via a custom
+# message file), then removes every untracked/ignored build by-product
+# from the workspace while preserving the files listed in `keep`.
+# Because composite steps abort on failure, the cleanup only runs after
+# a successful validation -- a failed run leaves the full workspace
+# intact for post-mortem log collection (e.g. via
+# texlive/upload-build-logs).
+#
+# Requires apt-get (Debian-based image) and a git-checked-out
+# workspace (the cleanup is `git clean`-based).
+#
+# Usage:
+#   - uses: stklug84/actions/texlive/validate-epub@v1
+#     with:
+#       main: book
+#       filter-file: config/epubcheck-filter.txt
+name: Validate EPUB and clean workspace
+description: >-
+  Validate an EPUB with a pinned epubcheck release, then strip build
+  by-products from the workspace while preserving the build outputs.
+
+inputs:
+  main:
+    description: Main document basename without .epub.
+    required: true
+  epubcheck-version:
+    description: epubcheck release to install.
+    required: false
+    default: "5.1.0"
+  filter-file:
+    description: >-
+      Optional epubcheck custom-message file (--customMessages) used to
+      downgrade cosmetic findings. Applied only when the file exists.
+    required: false
+    default: ""
+  clean:
+    description: >-
+      Whether to clean the workspace after a successful validation
+      (true/false).
+    required: false
+    default: "true"
+  keep:
+    description: >-
+      Newline-separated list of files preserved across the cleanup.
+      Empty → defaults to <main>.epub and <main>.pdf.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # epubcheck is fetched over HTTPS from the official GitHub release.
+    # No integrity check is enforced; rely on TLS for transport
+    # security. The headless JRE runs the epubcheck jar.
+    - name: Install epubcheck
+      shell: bash
+      env:
+        EPUBCHECK_VERSION: ${{ inputs.epubcheck-version }}
+      run: |
+        set -euo pipefail
+        apt-get update -qq
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          default-jre-headless \
+          unzip \
+          ca-certificates
+        java -version 2>&1 | head -n1 || true
+
+        URL="https://github.com/w3c/epubcheck/releases/download/v${EPUBCHECK_VERSION}/epubcheck-${EPUBCHECK_VERSION}.zip"
+        curl -fsSL -o epubcheck.zip "$URL"
+        unzip -q -d /opt epubcheck.zip
+        rm -f epubcheck.zip
+        mv "/opt/epubcheck-${EPUBCHECK_VERSION}" /opt/epubcheck
+        {
+          echo '#!/bin/sh'
+          echo 'exec java -jar /opt/epubcheck/epubcheck.jar "$@"'
+        } > /usr/local/bin/epubcheck
+        chmod +x /usr/local/bin/epubcheck
+        epubcheck --version || true
+
+    # Downgrade cosmetic findings to USAGE via the filter file when
+    # present.
+    - name: Validate EPUB with epubcheck
+      shell: bash
+      env:
+        MAIN: ${{ inputs.main }}
+        FILTER_FILE: ${{ inputs.filter-file }}
+      run: |
+        set -euo pipefail
+        if [ -n "$FILTER_FILE" ] && [ -f "$FILTER_FILE" ]; then
+          FILTER_ARGS=(--customMessages "$FILTER_FILE")
+        else
+          FILTER_ARGS=()
+        fi
+        epubcheck "${FILTER_ARGS[@]}" "$MAIN.epub"
+
+    # Post-validation housekeeping. Removes every build by-product
+    # (tex4ht XHTML/CSS/NCX, latex .aux/.dvi/.idv/.log/.xref/.lg,
+    # glossary intermediates, the unpacked staging tree, etc.) while
+    # preserving:
+    #   * The files listed in `keep` (default: the validated EPUB and,
+    #     when present, the PDF -- the PDF is best-effort since it is
+    #     normally built in a separate job and only shares a workspace
+    #     in local `gh act --reuse` runs).
+    #   * All git-tracked source files and the .git directory.
+    # Implementation: `git clean -fdx` strips every untracked and
+    # ignored path. The keep files are moved aside first, then
+    # restored -- the simplest provably-correct filter. Composite
+    # steps abort on failure, so a failed validation skips this step
+    # and leaves the workspace intact for post-mortem log upload.
+    - name: Clean workspace (keep build outputs)
+      shell: bash
+      env:
+        MAIN: ${{ inputs.main }}
+        CLEAN: ${{ inputs.clean }}
+        KEEP: ${{ inputs.keep }}
+      run: |
+        set -euo pipefail
+        if [ "$CLEAN" != "true" ]; then
+          echo "clean=false; skipping workspace cleanup."
+          exit 0
+        fi
+        if [ -z "${KEEP//[[:space:]]/}" ]; then
+          KEEP="$MAIN.epub"$'\n'"$MAIN.pdf"
+        fi
+        if [ ! -f "$MAIN.epub" ]; then
+          echo "::error::$MAIN.epub not found; refusing to clean."
+          exit 1
+        fi
+        keep_dir="$(mktemp -d)"
+        # Stash every build output that must survive `git clean`.
+        # Iterating one-by-one keeps the step robust under `set -e`
+        # regardless of which files exist.
+        while IFS= read -r f; do
+          f="$(echo "$f" | xargs)"   # trim
+          [ -z "$f" ] && continue
+          if [ -f "$f" ]; then
+            mv "$f" "$keep_dir/"
+            echo "Preserved $f"
+          fi
+        done <<< "$KEEP"
+        # actions/checkout writes the worktree as the runner UID; the
+        # container may run git as a different UID, which trips git's
+        # "dubious ownership" guard. Mark the workspace safe before
+        # invoking porcelain commands.
+        git config --global --add safe.directory "$PWD" || true
+        # -f: force, -d: include directories, -x: also remove ignored.
+        # Safe inside CI: the checked-out repo is disposable and the
+        # only files we need to preserve have been moved aside.
+        git clean -fdx
+        # Restore the stashed outputs. Guard against an empty stash
+        # via nullglob.
+        shopt -s nullglob
+        restored=("$keep_dir"/*)
+        if [ "${#restored[@]}" -gt 0 ]; then
+          mv "${restored[@]}" .
+        fi
+        shopt -u nullglob
+        rmdir "$keep_dir"
+        echo "Workspace after cleanup:"
+        ls -la
