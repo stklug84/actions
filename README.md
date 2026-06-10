@@ -1,6 +1,7 @@
 # actions
 
 [![Lint](https://github.com/stklug84/actions/actions/workflows/lint.yml/badge.svg)](https://github.com/stklug84/actions/actions/workflows/lint.yml)
+[![CodeQL](https://github.com/stklug84/actions/actions/workflows/codeql.yml/badge.svg)](https://github.com/stklug84/actions/actions/workflows/codeql.yml)
 
 Central, reusable **composite actions** for this account. Unlike reusable
 workflows (which must live flat in `.github/workflows/`), composite actions can
