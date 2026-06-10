@@ -82,6 +82,15 @@ npx markdownlint-cli2 --config .markdownlint.yaml '**/*.md'
 | yamllint     | `.yamllint.yml`      | all YAML files                         |
 | markdownlint | `.markdownlint.yaml` | all Markdown files                     |
 
+## Code scanning
+
+The `CodeQL` workflow (`.github/workflows/codeql.yml`) scans the
+workflows and composite actions with the `actions` language and the
+`security-extended` query suite (expression injection, excessive
+permissions, unpinned action tags, ...). It runs on pull requests
+against `main`, on pushes to `main`, and weekly. Findings appear under
+the repository's Security tab.
+
 ## Versioning and releases
 
 Releases are tagged `vX.Y.Z` with a moving major alias (`vX`):
