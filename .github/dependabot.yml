@@ -1,0 +1,29 @@
+---
+# title: Dependabot version updates configuration
+# authors:
+#   - Steffen Klug <45033201+stklug84@users.noreply.github.com>
+# date: 2026-06-10
+# keywords: [infrastructure, dependencies]
+# comment: |
+#   Weekly version updates for GitHub Actions. The github-actions
+#   ecosystem only scans .github/workflows for "/", so every composite
+#   action directory is listed explicitly (via globs). All action
+#   updates are grouped into a single pull request.
+#   Documentation:
+#   https://docs.github.com/code-security/dependabot/dependabot-version-updates
+# ---
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/jekyll/*"
+      - "/ruby/*"
+      - "/texlive/*"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
