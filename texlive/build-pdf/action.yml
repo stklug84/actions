@@ -3,11 +3,12 @@
 #
 # Unified engine dispatch (latexmk | pdflatex | xelatex | latex-chain)
 # with the auxiliary tools selected by the has-* inputs (biber/bibtex,
-# makeindex, makeglossaries) and built-in PDF verification. Supersedes
-# texlive/build-pdflatex and texlive/build-latex-chain, which are
-# deprecated. Supports out-of-root documents via the working-directory
-# input (composite steps do not inherit the caller job's run defaults)
-# and kpathsea search-path injection via the texinputs input.
+# makeindex, makeglossaries) and built-in PDF verification. Replaced
+# the former texlive/build-pdflatex and texlive/build-latex-chain
+# actions (removed in v2). Supports out-of-root documents via the
+# working-directory input (composite steps do not inherit the caller
+# job's run defaults) and kpathsea search-path injection via the
+# texinputs input.
 #
 # Requires a TeX Live toolchain on PATH (e.g. the texlive/texlive
 # container) and a checked-out workspace. Pair with texlive/detect or
