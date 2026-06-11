@@ -9,10 +9,13 @@
 #	yq (mikefarah)
 # @description:
 #	Run shellcheck on every `run:` block with `shell: bash` extracted
-#	from the composite action.yml files. Needed because actionlint
-#	only covers .github/workflows/*, not composite actions. Rules are
-#	picked up from .shellcheckrc in the repository root, so run this
-#	from there. All dependencies are preinstalled on ubuntu-latest.
+#	from the composite action.yml files, and on every standalone
+#	*.sh script in the repository (composite actions may keep their
+#	bash in a scripts/ directory next to action.yml, invoked via
+#	GITHUB_ACTION_PATH). Needed because actionlint only covers
+#	.github/workflows/*, not composite actions. Rules are picked up
+#	from .shellcheckrc in the repository root, so run this from
+#	there. All dependencies are preinstalled on ubuntu-latest.
 # @arguments:
 #	none
 ## Usage: scripts/shellcheck-actions.sh
@@ -53,6 +56,17 @@ while IFS= read -r -d '' ACTION_FILE; do
   done
 done < <(find . -path ./.git -prune -o -path ./.github -prune -o -name 'action.yml' -print0)
 
+# Standalone shell scripts (composite-action scripts/ directories and
+# repository helpers), excluding .git/.
+while IFS= read -r -d '' SCRIPT_FILE; do
+  CHECKED=$((CHECKED + 1))
+  echo "shellcheck: $SCRIPT_FILE"
+  if ! shellcheck "$SCRIPT_FILE"; then
+    echo "::error file=$SCRIPT_FILE::shellcheck failed"
+    FAILURES=$((FAILURES + 1))
+  fi
+done < <(find . -path ./.git -prune -o -name '*.sh' -print0)
+
 echo
-echo "Checked $CHECKED bash step(s), $FAILURES failure(s)."
+echo "Checked $CHECKED bash step(s)/script(s), $FAILURES failure(s)."
 [ "$FAILURES" -eq 0 ]

@@ -1,0 +1,60 @@
+---
+# Composite action: discover LaTeX document variants and emit a build
+# matrix.
+#
+# Scans every subdirectory of `root` for exactly one *.tex with
+# \documentclass, resolves the engine from an optional `.engine`
+# dotfile (latexmk | pdflatex | xelatex | latex-chain; default:
+# `default-engine`), and detects auxiliary toolchain requirements per
+# variant (bibtex/biblatex, makeindex, glossaries, psfrag). Emits a
+# JSON `{"include":[...]}` matrix for `strategy.matrix` via fromJson().
+# Each entry feeds texlive/build-pdf directly. The multi-variant
+# counterpart to texlive/detect (which targets a single root document).
+#
+# The caller MUST run actions/checkout before this action: discovery
+# greps the repository's .tex files in the workspace.
+#
+# Usage:
+#   - uses: actions/checkout@v6
+#   - id: scan
+#     uses: stklug84/actions/texlive/discover-variants@v1
+#     with:
+#       root: cvs
+#       default-engine: latexmk
+name: Discover LaTeX variants
+description: >-
+  Scan a root directory for per-variant LaTeX documents (one main .tex
+  plus an optional .engine dotfile per subdirectory) and emit a JSON
+  build matrix with engine and auxiliary-tool flags for each variant.
+
+inputs:
+  root:
+    description: Directory containing one subdirectory per variant.
+    required: true
+  default-engine:
+    description: Engine used when a variant has no `.engine` dotfile.
+    required: false
+    default: "latexmk"
+
+outputs:
+  matrix:
+    description: >-
+      JSON object of the form {"include":[...]} suitable for
+      `strategy.matrix` via fromJson(). Each entry carries name, dir,
+      main, engine, and has_* auxiliary-tool flags.
+    value: ${{ steps.scan.outputs.matrix }}
+
+runs:
+  using: composite
+  steps:
+    - name: Scan variants and build matrix
+      id: scan
+      shell: bash
+      env:
+        ROOT: ${{ inputs.root }}
+        DEFAULT_ENGINE: ${{ inputs.default-engine }}
+      run: |
+        set -euo pipefail
+        matrix="$("$GITHUB_ACTION_PATH/scripts/scan.sh" "$ROOT" "$DEFAULT_ENGINE")"
+        echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+        echo "matrix=$matrix"

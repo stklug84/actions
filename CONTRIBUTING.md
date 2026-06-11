@@ -19,11 +19,19 @@ Each composite action lives in its own directory:
 
 ```text
 <domain>/<action-name>/action.yml
+<domain>/<action-name>/scripts/   # optional standalone bash scripts
 ```
 
 Examples: `ruby/setup-ruby-bundler`, `texlive/detect`. New actions should
 follow this pattern and be documented in the [README](README.md) with a
 usage snippet plus input/output tables.
+
+Larger bash logic may live in a `scripts/` directory next to the
+`action.yml`, invoked via `"$GITHUB_ACTION_PATH/scripts/<name>.sh"` (the
+full repository is downloaded when a subdirectory action is consumed, so
+the scripts are always present). This keeps the logic locally testable;
+`scripts/shellcheck-actions.sh` lints standalone `*.sh` files alongside
+the inline `run:` blocks.
 
 ## Conventions
 

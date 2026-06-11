@@ -1,0 +1,114 @@
+---
+# Composite action: build a PDF with any supported TeX Live engine.
+#
+# Unified engine dispatch (latexmk | pdflatex | xelatex | latex-chain)
+# with the auxiliary tools selected by the has-* inputs (biber/bibtex,
+# makeindex, makeglossaries) and built-in PDF verification. Supersedes
+# texlive/build-pdflatex and texlive/build-latex-chain, which are
+# deprecated. Supports out-of-root documents via the working-directory
+# input (composite steps do not inherit the caller job's run defaults)
+# and kpathsea search-path injection via the texinputs input.
+#
+# Requires a TeX Live toolchain on PATH (e.g. the texlive/texlive
+# container) and a checked-out workspace. Pair with texlive/detect or
+# texlive/discover-variants to resolve the inputs.
+#
+# Usage:
+#   - uses: stklug84/actions/texlive/build-pdf@v1
+#     with:
+#       main: lebenslauf-sidebar
+#       engine: xelatex
+#       working-directory: cvs/sidebar
+#       texinputs: ".:../..:../../styles:../../images:"
+#       has-bib:        ${{ matrix.has_bib }}
+#       has-biblatex:   ${{ matrix.has_biblatex }}
+#       has-index:      ${{ matrix.has_index }}
+#       has-glossaries: ${{ matrix.has_glossaries }}
+#       has-psfrag:     ${{ matrix.has_psfrag }}
+name: Build PDF
+description: >-
+  Unified TeX Live PDF build with engine dispatch (latexmk, pdflatex,
+  xelatex, latex-chain), bibliography (bibtex/biber), index
+  (makeindex), and glossaries (makeglossaries) handling, plus PDF
+  verification. psfrag documents require the latex-chain engine.
+
+inputs:
+  main:
+    description: Main document basename without .tex.
+    required: true
+  engine:
+    description: >-
+      TeX Live engine to use: latexmk, pdflatex, xelatex, or
+      latex-chain (latex -> dvips -> ps2pdf; the only engine that
+      supports psfrag).
+    required: true
+  working-directory:
+    description: >-
+      Directory to build in, relative to the workspace. Composite
+      steps do not inherit the caller job's run defaults, so set this
+      for documents outside the workspace root.
+    required: false
+    default: "."
+  texinputs:
+    description: >-
+      Optional TEXINPUTS search path (kpathsea) so the main .tex can
+      resolve shared assets outside the working directory. Empty
+      leaves the environment untouched.
+    required: false
+    default: ""
+  has-bib:
+    description: Run BibTeX (\bibliography{...} detected).
+    required: false
+    default: "false"
+  has-biblatex:
+    description: Run biber (biblatex detected; takes precedence over has-bib).
+    required: false
+    default: "false"
+  has-index:
+    description: Run makeindex when an .idx file is produced.
+    required: false
+    default: "false"
+  has-glossaries:
+    description: Run makeglossaries.
+    required: false
+    default: "false"
+  has-psfrag:
+    description: >-
+      Whether psfrag is used. pdflatex and xelatex cannot process
+      psfrag; when 'true' those engines fail with a pointer to
+      latex-chain. Informational for latex-chain itself.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Build PDF
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        ENGINE: ${{ inputs.engine }}
+        MAIN: ${{ inputs.main }}
+        TEXINPUTS_IN: ${{ inputs.texinputs }}
+        HAS_BIB: ${{ inputs.has-bib }}
+        HAS_BIBLATEX: ${{ inputs.has-biblatex }}
+        HAS_INDEX: ${{ inputs.has-index }}
+        HAS_GLOSSARIES: ${{ inputs.has-glossaries }}
+        HAS_PSFRAG: ${{ inputs.has-psfrag }}
+      run: |
+        set -euo pipefail
+        "$GITHUB_ACTION_PATH/scripts/build.sh"
+
+    - name: Verify PDF
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        DIR: ${{ inputs.working-directory }}
+        MAIN: ${{ inputs.main }}
+      run: |
+        set -euo pipefail
+        if [ ! -s "$MAIN.pdf" ]; then
+          echo "::error::Expected $DIR/$MAIN.pdf was not produced or is empty."
+          exit 1
+        fi
+        ls -la "$MAIN.pdf"

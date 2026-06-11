@@ -61,12 +61,12 @@ checked out first (`actions/checkout`).
     main-tex: ""   # optional; empty → auto-detect via \documentclass
 ```
 
-| Input            | Default     | Description                                                                       |
-|------------------|-------------|-----------------------------------------------------------------------------------|
-| `engine`         | `""`        | LaTeX toolchain (`latexmk`, `pdflatex`, `latex-chain`). Empty → `default-engine`. |
-| `default-engine` | `"latexmk"` | Engine used when `engine` is empty.                                               |
-| `local`          | `""`        | Local (gh act) mode. Empty → auto-detect via `ACT` env, else `false`.             |
-| `main-tex`       | `""`        | Main document basename without `.tex`. Empty → auto-detect via `\documentclass`.  |
+| Input            | Default     | Description                                                                                  |
+|------------------|-------------|----------------------------------------------------------------------------------------------|
+| `engine`         | `""`        | LaTeX toolchain (`latexmk`, `pdflatex`, `xelatex`, `latex-chain`). Empty → `default-engine`. |
+| `default-engine` | `"latexmk"` | Engine used when `engine` is empty.                                                          |
+| `local`          | `""`        | Local (gh act) mode. Empty → auto-detect via `ACT` env, else `false`.                        |
+| `main-tex`       | `""`        | Main document basename without `.tex`. Empty → auto-detect via `\documentclass`.             |
 
 | Output           | Description                                              |
 |------------------|----------------------------------------------------------|
@@ -79,7 +79,78 @@ checked out first (`actions/checkout`).
 | `has_glossaries` | Main `.tex` uses glossaries (makeglossaries).            |
 | `has_psfrag`     | Main `.tex` uses psfrag (latex-chain only).              |
 
-## `texlive/build-pdflatex`
+## `texlive/discover-variants`
+
+Scan a root directory for per-variant LaTeX documents — one subdirectory per
+variant, each containing exactly one `*.tex` with `\documentclass` plus an
+optional `.engine` dotfile (`latexmk` | `pdflatex` | `xelatex` |
+`latex-chain`) — and emit a JSON `{"include":[...]}` matrix for
+`strategy.matrix` via `fromJson()`. Each entry carries the variant's
+auxiliary-tool flags and feeds `texlive/build-pdf` directly. The
+multi-variant counterpart to `texlive/detect` (single root document).
+Requires the repository to be checked out first (`actions/checkout`).
+
+```yaml
+- uses: actions/checkout@v6
+- id: scan
+  uses: stklug84/actions/texlive/discover-variants@v1
+  with:
+    root: cvs
+    default-engine: latexmk
+```
+
+| Input            | Default     | Description                                             |
+|------------------|-------------|---------------------------------------------------------|
+| `root`           | —           | Directory with one subdirectory per variant. Required.  |
+| `default-engine` | `"latexmk"` | Engine used when a variant has no `.engine` dotfile.    |
+
+| Output   | Description                                                                                        |
+|----------|----------------------------------------------------------------------------------------------------|
+| `matrix` | `{"include":[...]}` JSON; entries carry `name`, `dir`, `main`, `engine`, and `has_*` flags.        |
+
+## `texlive/build-pdf`
+
+Unified TeX Live PDF build with engine dispatch — `latexmk`, `pdflatex`,
+`xelatex`, or `latex-chain` (`latex` → `dvips` → `ps2pdf`, the only engine
+that supports psfrag) — with bibliography (bibtex/biber), index (makeindex),
+and glossaries (makeglossaries) handling and built-in PDF verification.
+Supports out-of-root documents via `working-directory` and kpathsea
+search-path injection via `texinputs`. Supersedes `texlive/build-pdflatex`
+and `texlive/build-latex-chain`. Requires a TeX Live toolchain on PATH
+(e.g. the `texlive/texlive` container) and a checked-out workspace. Pair
+with `texlive/detect` or `texlive/discover-variants`.
+
+```yaml
+- uses: stklug84/actions/texlive/build-pdf@v1
+  with:
+    main: lebenslauf-sidebar
+    engine: xelatex
+    working-directory: cvs/sidebar
+    texinputs: ".:../..:../../styles:../../images:"
+    has-bib:        ${{ matrix.has_bib }}
+    has-biblatex:   ${{ matrix.has_biblatex }}
+    has-index:      ${{ matrix.has_index }}
+    has-glossaries: ${{ matrix.has_glossaries }}
+    has-psfrag:     ${{ matrix.has_psfrag }}
+```
+
+| Input               | Default   | Description                                                          |
+|---------------------|-----------|----------------------------------------------------------------------|
+| `main`              | —         | Main document basename without `.tex`. Required.                     |
+| `engine`            | —         | `latexmk`, `pdflatex`, `xelatex`, or `latex-chain`. Required.        |
+| `working-directory` | `"."`     | Directory to build in, relative to the workspace.                    |
+| `texinputs`         | `""`      | Optional `TEXINPUTS` search path. Empty → environment untouched.     |
+| `has-bib`           | `"false"` | Run BibTeX.                                                          |
+| `has-biblatex`      | `"false"` | Run biber (takes precedence over `has-bib`).                         |
+| `has-index`         | `"false"` | Run makeindex when an `.idx` file is produced.                       |
+| `has-glossaries`    | `"false"` | Run makeglossaries.                                                  |
+| `has-psfrag`        | `"false"` | `true` → hard error for `pdflatex`/`xelatex` (need `latex-chain`).   |
+
+## `texlive/build-pdflatex` (deprecated)
+
+> **Deprecated:** use [`texlive/build-pdf`](#texlivebuild-pdf) with
+> `engine: pdflatex` instead. Kept functional for existing `@v1` consumers;
+> removal is planned for `v2`.
 
 Three-pass pdflatex PDF build with bibliography (bibtex/biber), index
 (makeindex), and glossaries (makeglossaries) handling. Fails fast when psfrag
@@ -107,7 +178,11 @@ workspace. Pair with `texlive/detect`.
 | `has-glossaries` | `"false"` | Run makeglossaries.                                          |
 | `has-psfrag`     | `"false"` | `true` → hard error (pdflatex cannot process psfrag).        |
 
-## `texlive/build-latex-chain`
+## `texlive/build-latex-chain` (deprecated)
+
+> **Deprecated:** use [`texlive/build-pdf`](#texlivebuild-pdf) with
+> `engine: latex-chain` instead. Kept functional for existing `@v1`
+> consumers; removal is planned for `v2`.
 
 Three-pass latex PDF build followed by `dvips -Ppdf -G0` and
 `ps2pdf -dPDFSETTINGS=/prepress`, with the same bibliography / index /
