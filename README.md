@@ -115,10 +115,11 @@ Unified TeX Live PDF build with engine dispatch — `latexmk`, `pdflatex`,
 that supports psfrag) — with bibliography (bibtex/biber), index (makeindex),
 and glossaries (makeglossaries) handling and built-in PDF verification.
 Supports out-of-root documents via `working-directory` and kpathsea
-search-path injection via `texinputs`. Supersedes `texlive/build-pdflatex`
-and `texlive/build-latex-chain`. Requires a TeX Live toolchain on PATH
-(e.g. the `texlive/texlive` container) and a checked-out workspace. Pair
-with `texlive/detect` or `texlive/discover-variants`.
+search-path injection via `texinputs`. Replaced the former
+`texlive/build-pdflatex` and `texlive/build-latex-chain` actions (removed
+in `v2`; the frozen `v1` line still ships them). Requires a TeX Live
+toolchain on PATH (e.g. the `texlive/texlive` container) and a checked-out
+workspace. Pair with `texlive/detect` or `texlive/discover-variants`.
 
 ```yaml
 - uses: stklug84/actions/texlive/build-pdf@v1
@@ -145,57 +146,6 @@ with `texlive/detect` or `texlive/discover-variants`.
 | `has-index`         | `"false"` | Run makeindex when an `.idx` file is produced.                       |
 | `has-glossaries`    | `"false"` | Run makeglossaries.                                                  |
 | `has-psfrag`        | `"false"` | `true` → hard error for `pdflatex`/`xelatex` (need `latex-chain`).   |
-
-## `texlive/build-pdflatex` (deprecated)
-
-> **Deprecated:** use [`texlive/build-pdf`](#texlivebuild-pdf) with
-> `engine: pdflatex` instead. Kept functional for existing `@v1` consumers;
-> removal is planned for `v2`.
-
-Three-pass pdflatex PDF build with bibliography (bibtex/biber), index
-(makeindex), and glossaries (makeglossaries) handling. Fails fast when psfrag
-is required (psfrag needs `texlive/build-latex-chain`). Requires a TeX Live
-toolchain on PATH (e.g. the `texlive/texlive` container) and a checked-out
-workspace. Pair with `texlive/detect`.
-
-```yaml
-- uses: stklug84/actions/texlive/build-pdflatex@v1
-  with:
-    main: book
-    has-bib:        ${{ needs.detect.outputs.has_bib }}
-    has-biblatex:   ${{ needs.detect.outputs.has_biblatex }}
-    has-index:      ${{ needs.detect.outputs.has_index }}
-    has-glossaries: ${{ needs.detect.outputs.has_glossaries }}
-    has-psfrag:     ${{ needs.detect.outputs.has_psfrag }}
-```
-
-| Input            | Default   | Description                                                  |
-|------------------|-----------|--------------------------------------------------------------|
-| `main`           | —         | Main document basename without `.tex`. Required.             |
-| `has-bib`        | `"false"` | Run BibTeX.                                                  |
-| `has-biblatex`   | `"false"` | Run biber (takes precedence over `has-bib`).                 |
-| `has-index`      | `"false"` | Run makeindex when an `.idx` file is produced.               |
-| `has-glossaries` | `"false"` | Run makeglossaries.                                          |
-| `has-psfrag`     | `"false"` | `true` → hard error (pdflatex cannot process psfrag).        |
-
-## `texlive/build-latex-chain` (deprecated)
-
-> **Deprecated:** use [`texlive/build-pdf`](#texlivebuild-pdf) with
-> `engine: latex-chain` instead. Kept functional for existing `@v1`
-> consumers; removal is planned for `v2`.
-
-Three-pass latex PDF build followed by `dvips -Ppdf -G0` and
-`ps2pdf -dPDFSETTINGS=/prepress`, with the same bibliography / index /
-glossaries handling as `texlive/build-pdflatex`. The only engine that supports
-psfrag substitutions (performed by dvips). Same inputs as
-`texlive/build-pdflatex`; `has-psfrag` is informational only.
-
-```yaml
-- uses: stklug84/actions/texlive/build-latex-chain@v1
-  with:
-    main: book
-    has-glossaries: "true"
-```
 
 ## `texlive/build-epub`
 
@@ -314,5 +264,10 @@ conventions, and how to run the lint checks locally.
 ## Versioning
 
 Releases are tagged `vX.Y.Z` with a moving major alias (`vX`). Pin to the major
-alias (`@v1`) for automatic patch/minor updates, or to an exact tag for
+alias (`@v2`) for automatic patch/minor updates, or to an exact tag for
 immutability.
+
+Current major: `v2` (removed the deprecated `texlive/build-pdflatex` and
+`texlive/build-latex-chain` actions; use `texlive/build-pdf` with the
+`engine` input instead). The `v1` alias is frozen at `v1.3.0` and still
+ships the removed actions.
