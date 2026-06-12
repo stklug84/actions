@@ -141,7 +141,7 @@ workspace. Pair with `texlive/detect` or `texlive/discover-variants`.
 | `engine`            | —         | `latexmk`, `pdflatex`, `xelatex`, or `latex-chain`. Required.        |
 | `working-directory` | `"."`     | Directory to build in, relative to the workspace.                    |
 | `texinputs`         | `""`      | Optional `TEXINPUTS` search path. Empty → environment untouched.     |
-| `eps-from-pdf`      | `""`      | Newline list of PDF graphics converted to `.eps` siblings (latex-chain only; dvips cannot embed PDF). |
+| `eps-from-pdf`      | `""`      | Newline list of PDFs converted to `.eps` (latex-chain only).         |
 | `has-bib`           | `"false"` | Run BibTeX.                                                          |
 | `has-biblatex`      | `"false"` | Run biber (takes precedence over `has-bib`).                         |
 | `has-index`         | `"false"` | Run makeindex when an `.idx` file is produced.                       |
