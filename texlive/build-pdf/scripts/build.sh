@@ -6,20 +6,21 @@
 #	biber | bibtex (if HAS_BIBLATEX / HAS_BIB)
 #	makeindex (if HAS_INDEX)
 #	makeglossaries (if HAS_GLOSSARIES)
-#	dvips, ps2pdf (if ENGINE=latex-chain)
+#	dvips, ps2pdf, gs (if ENGINE=latex-chain)
 # @description:
 #	Compile a LaTeX document to PDF. Driven entirely by environment
 #	variables set in action.yml: ENGINE selects the build engine
 #	(latexmk | pdflatex | xelatex | latex-chain), MAIN names the
 #	main .tex basename without extension, TEXINPUTS_IN optionally
-#	extends the kpathsea search path, and the flags HAS_BIB,
-#	HAS_BIBLATEX, HAS_INDEX, HAS_GLOSSARIES, and HAS_PSFRAG
-#	('true'/'false') enable the matching auxiliary tools. Must run
-#	inside the document directory; action.yml sets
-#	working-directory.
+#	extends the kpathsea search path, EPS_FROM_PDF optionally lists
+#	PDF graphics converted to .eps siblings for the DVI-mode
+#	latex-chain engine, and the flags HAS_BIB, HAS_BIBLATEX,
+#	HAS_INDEX, HAS_GLOSSARIES, and HAS_PSFRAG ('true'/'false')
+#	enable the matching auxiliary tools. Must run inside the
+#	document directory; action.yml sets working-directory.
 # @arguments:
 #	none (configured via environment variables, see @description)
-## Usage: ENGINE=<engine> MAIN=<basename> [TEXINPUTS_IN=<path>] [HAS_*=true|false] build.sh
+## Usage: ENGINE=<engine> MAIN=<basename> [TEXINPUTS_IN=<path>] [EPS_FROM_PDF=<paths>] [HAS_*=true|false] build.sh
 ### Example: ENGINE=xelatex MAIN=lebenslauf-sidebar build.sh
 
 set -euo pipefail
@@ -35,6 +36,28 @@ HAS_PSFRAG="${HAS_PSFRAG:-false}"
 # Optional kpathsea search path (empty input leaves the env untouched).
 if [ -n "${TEXINPUTS_IN:-}" ]; then
   export TEXINPUTS="$TEXINPUTS_IN"
+fi
+
+# Derive .eps siblings for DVI-mode graphics. graphicx + dvips cannot
+# embed PDF graphics: the dvips driver resolves extension-less
+# \includegraphics arguments to .eps, so each PDF listed in
+# EPS_FROM_PDF (newline-separated, relative to the working directory)
+# is converted next to its source (ghostscript ships with TeX Live; it
+# powers ps2pdf). Only relevant for latex-chain; the PDF-mode engines
+# embed the .pdf directly and ignore the derived .eps.
+if [ "$ENGINE" = "latex-chain" ] && [ -n "${EPS_FROM_PDF:-}" ]; then
+  while IFS= read -r pdf; do
+    pdf="$(echo "$pdf" | xargs)"   # trim
+    [ -z "$pdf" ] && continue
+    if [ ! -f "$pdf" ]; then
+      echo "::error::eps-from-pdf: $pdf not found."
+      exit 1
+    fi
+    eps="${pdf%.pdf}.eps"
+    gs -dNOPAUSE -dBATCH -dSAFER -dEPSCrop \
+       -sDEVICE=eps2write -sOutputFile="$eps" "$pdf"
+    echo "Derived $eps from $pdf"
+  done <<< "$EPS_FROM_PDF"
 fi
 
 psfrag_unsupported() {
