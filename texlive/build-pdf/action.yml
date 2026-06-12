@@ -57,6 +57,15 @@ inputs:
       leaves the environment untouched.
     required: false
     default: ""
+  eps-from-pdf:
+    description: >-
+      Newline-separated list of PDF graphics (relative to
+      working-directory) converted to .eps siblings before the build.
+      Only applied for the latex-chain engine: graphicx + dvips cannot
+      embed PDF graphics, and the dvips driver resolves extension-less
+      \includegraphics arguments to .eps. Empty skips the conversion.
+    required: false
+    default: ""
   has-bib:
     description: Run BibTeX (\bibliography{...} detected).
     required: false
@@ -91,6 +100,7 @@ runs:
         ENGINE: ${{ inputs.engine }}
         MAIN: ${{ inputs.main }}
         TEXINPUTS_IN: ${{ inputs.texinputs }}
+        EPS_FROM_PDF: ${{ inputs.eps-from-pdf }}
         HAS_BIB: ${{ inputs.has-bib }}
         HAS_BIBLATEX: ${{ inputs.has-biblatex }}
         HAS_INDEX: ${{ inputs.has-index }}
