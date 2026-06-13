@@ -1,0 +1,680 @@
+#!/usr/bin/env python3
+"""Parse a canonical bilingual ``cv.yaml`` and emit consumer outputs.
+
+Two output modes:
+
+* ``latex`` — per-section ``.tex`` files for a selected ``--style``
+  (``plain`` | ``sidebar``) and ``--lang`` (``de`` | ``en``), filtered to
+  entries whose ``targets`` contains ``latex``.
+* ``web`` — a single ``cv.yml`` in skcloud's exact schema (English,
+  filtered to entries whose ``targets`` contains ``web``).
+
+A ``--check`` mode validates the schema against the shared contract and
+writes nothing, exiting nonzero with a clear message on the first
+violation.
+
+The emitters render Jinja2 templates from ``templates/`` with
+``autoescape=False`` and an explicit ``latex`` escape filter (see
+``DECISIONS.md``). YAML is loaded with ``yaml.safe_load`` only.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+from typing import Any
+
+import yaml
+from jinja2 import Environment, FileSystemLoader
+
+TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+
+REQUIRED_TOP_LEVEL = [
+    "meta",
+    "contact",
+    "experience",
+    "education",
+    "conferences",
+    "skills",
+    "languages",
+    "certifications",
+    "interests",
+]
+
+VALID_TARGETS = {"latex", "web"}
+VALID_KINDS = {"work", "study", "cert"}
+DEFAULT_TARGETS = ["latex", "web"]
+
+# Section -> output filename for the LaTeX mode.
+LATEX_SECTION_FILES = {
+    "personal-info": "personal-info.tex",
+    "experience": "cv-experience.tex",
+    "education": "cv-education.tex",
+    "conferences": "cv-conferences.tex",
+    "skills": "cv-skills.tex",
+    "languages": "cv-languages.tex",
+    "interests": "cv-interests.tex",
+    "certifications": "cv-certifications.tex",
+}
+
+
+class CheckError(Exception):
+    """A schema validation failure with a human-readable message."""
+
+
+# --------------------------------------------------------------------------
+# Loading
+# --------------------------------------------------------------------------
+def load_cv(path: Path) -> dict[str, Any]:
+    """Load the canonical cv.yaml with ``yaml.safe_load`` only."""
+    if not path.is_file():
+        raise CheckError(f"source not found: {path}")
+    with path.open(encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    if not isinstance(data, dict):
+        raise CheckError(f"{path}: top-level YAML must be a mapping")
+    return data
+
+
+# --------------------------------------------------------------------------
+# Validation (--check)
+# --------------------------------------------------------------------------
+def _targets_of(entry: dict[str, Any], where: str) -> list[str]:
+    """Return the validated ``targets`` of an entry (absent -> default)."""
+    targets = entry.get("targets")
+    if targets is None:
+        return list(DEFAULT_TARGETS)
+    if not isinstance(targets, list) or not all(isinstance(t, str) for t in targets):
+        raise CheckError(f"{where}: targets must be a list of strings")
+    invalid = [t for t in targets if t not in VALID_TARGETS]
+    if invalid:
+        raise CheckError(
+            f"{where}: invalid target(s) {invalid}; "
+            f"allowed: {sorted(VALID_TARGETS)}"
+        )
+    return targets
+
+
+def _check_bilingual(value: Any, where: str) -> None:
+    """A bilingual field must be a mapping with non-empty de and en."""
+    if not isinstance(value, dict):
+        raise CheckError(f"{where}: must be a mapping with 'de' and 'en'")
+    for lang in ("de", "en"):
+        if lang not in value:
+            raise CheckError(f"{where}: missing required '{lang}'")
+        text = value[lang]
+        if not isinstance(text, str) or not text.strip():
+            raise CheckError(f"{where}: '{lang}' must be a non-empty string")
+
+
+def _check_int(value: Any, where: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise CheckError(f"{where}: must be an integer")
+    return value
+
+
+def validate(data: dict[str, Any]) -> None:
+    """Validate ``data`` against the shared schema contract.
+
+    Raises :class:`CheckError` on the first violation found.
+    """
+    # Rule 1: required top-level keys present.
+    for key in REQUIRED_TOP_LEVEL:
+        if key not in data:
+            raise CheckError(f"missing required top-level key: {key}")
+
+    # Rule 2: meta.title/location/summary have both de and en.
+    meta = data["meta"]
+    if not isinstance(meta, dict):
+        raise CheckError("meta: must be a mapping")
+    for field in ("title", "location", "summary"):
+        if field not in meta:
+            raise CheckError(f"meta.{field}: missing")
+        _check_bilingual(meta[field], f"meta.{field}")
+
+    # Rule 6: contact.address is a list of 1-3 strings.
+    contact = data["contact"]
+    if not isinstance(contact, dict):
+        raise CheckError("contact: must be a mapping")
+    address = contact.get("address")
+    if not isinstance(address, list) or not (1 <= len(address) <= 3):
+        raise CheckError("contact.address: must be a list of 1-3 strings")
+    if not all(isinstance(line, str) and line.strip() for line in address):
+        raise CheckError("contact.address: every entry must be a non-empty string")
+
+    # experience[]
+    exp_ids: list[str] = []
+    for index, entry in enumerate(data["experience"]):
+        where = f"experience[{index}]"
+        if not isinstance(entry, dict):
+            raise CheckError(f"{where}: must be a mapping")
+        _targets_of(entry, where)  # Rule 3.
+        eid = entry.get("id")
+        if not isinstance(eid, str) or not eid.strip():
+            raise CheckError(f"{where}.id: must be a non-empty string")
+        exp_ids.append(eid)
+        # Rule 5: kind in {work, study, cert}; year integer.
+        if entry.get("kind") not in VALID_KINDS:
+            raise CheckError(f"{where}.kind: must be one of {sorted(VALID_KINDS)}")
+        _check_int(entry.get("year"), f"{where}.year")
+        # Rule 4: bilingual fields non-empty de + en.
+        for field in ("period", "role", "location", "summary"):
+            _check_bilingual(entry.get(field), f"{where}.{field}")
+        for b_index, bullet in enumerate(entry.get("bullets", []) or []):
+            _check_bilingual(bullet, f"{where}.bullets[{b_index}]")
+        for s_index, sub in enumerate(entry.get("subentries", []) or []):
+            sub_where = f"{where}.subentries[{s_index}]"
+            if not isinstance(sub, dict):
+                raise CheckError(f"{sub_where}: must be a mapping")
+            _check_bilingual(sub.get("title"), f"{sub_where}.title")
+            for sb_index, sbullet in enumerate(sub.get("bullets", []) or []):
+                _check_bilingual(sbullet, f"{sub_where}.bullets[{sb_index}]")
+
+    # education[]
+    edu_ids: list[str] = []
+    for index, entry in enumerate(data["education"]):
+        where = f"education[{index}]"
+        if not isinstance(entry, dict):
+            raise CheckError(f"{where}: must be a mapping")
+        _targets_of(entry, where)
+        eid = entry.get("id")
+        if not isinstance(eid, str) or not eid.strip():
+            raise CheckError(f"{where}.id: must be a non-empty string")
+        edu_ids.append(eid)
+        for field in ("degree", "institution"):
+            _check_bilingual(entry.get(field), f"{where}.{field}")
+        for d_index, detail in enumerate(entry.get("details", []) or []):
+            _check_bilingual(detail, f"{where}.details[{d_index}]")
+
+    # Rule 7: id values unique within experience and education.
+    for ids, label in ((exp_ids, "experience"), (edu_ids, "education")):
+        dupes = {i for i in ids if ids.count(i) > 1}
+        if dupes:
+            raise CheckError(f"{label}: duplicate id(s): {sorted(dupes)}")
+
+    # conferences[]
+    for index, entry in enumerate(data["conferences"]):
+        where = f"conferences[{index}]"
+        if not isinstance(entry, dict):
+            raise CheckError(f"{where}: must be a mapping")
+        _targets_of(entry, where)
+        _check_int(entry.get("year"), f"{where}.year")
+        if not isinstance(entry.get("name"), str) or not entry["name"].strip():
+            raise CheckError(f"{where}.name: must be a non-empty string")
+
+    # skills[]
+    for index, entry in enumerate(data["skills"]):
+        where = f"skills[{index}]"
+        if not isinstance(entry, dict):
+            raise CheckError(f"{where}: must be a mapping")
+        _targets_of(entry, where)
+        _check_bilingual(entry.get("group"), f"{where}.group")
+        items = entry.get("items")
+        if not isinstance(items, list) or not items:
+            raise CheckError(f"{where}.items: must be a non-empty list")
+
+    # languages[]
+    for index, entry in enumerate(data["languages"]):
+        where = f"languages[{index}]"
+        if not isinstance(entry, dict):
+            raise CheckError(f"{where}: must be a mapping")
+        _targets_of(entry, where)
+        _check_bilingual(entry.get("name"), f"{where}.name")
+        _check_bilingual(entry.get("level_label"), f"{where}.level_label")
+        level = _check_int(entry.get("level"), f"{where}.level")
+        if not 1 <= level <= 5:  # Rule 5: level in 1..5.
+            raise CheckError(f"{where}.level: must be an integer in 1..5")
+
+    # certifications[]
+    for index, entry in enumerate(data["certifications"]):
+        where = f"certifications[{index}]"
+        if not isinstance(entry, dict):
+            raise CheckError(f"{where}: must be a mapping")
+        _targets_of(entry, where)
+        _check_bilingual(entry.get("text"), f"{where}.text")
+
+    # interests[]
+    for index, entry in enumerate(data["interests"]):
+        where = f"interests[{index}]"
+        if not isinstance(entry, dict):
+            raise CheckError(f"{where}: must be a mapping")
+        _targets_of(entry, where)
+        _check_bilingual(entry, where)
+
+
+# --------------------------------------------------------------------------
+# Jinja2 environment + filters
+# --------------------------------------------------------------------------
+# Matches \href{url}{name} so we can escape name but leave url intact.
+_HREF_RE = re.compile(r"\\href\{([^}]*)\}\{([^}]*)\}")
+
+# LaTeX special characters that need escaping (handled per-char below).
+_LATEX_SPECIALS = {
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+    "\\": r"\textbackslash{}",
+}
+
+# Placeholders that survive escaping so dashes are preserved verbatim.
+# (NUL-delimited sentinels; not secrets — bandit B105 is a false positive.)
+_EMDASH_TOKEN = "\x00EMDASH\x00"  # nosec B105
+_ENDASH_TOKEN = "\x00ENDASH\x00"  # nosec B105
+
+
+def _escape_plain(text: str) -> str:
+    """Escape LaTeX specials, preserving ``---`` and ``--`` dashes."""
+    # Protect dashes first (longest match wins).
+    protected = text.replace("---", _EMDASH_TOKEN).replace("--", _ENDASH_TOKEN)
+    out: list[str] = []
+    for char in protected:
+        out.append(_LATEX_SPECIALS.get(char, char))
+    escaped = "".join(out)
+    return escaped.replace(_EMDASH_TOKEN, "---").replace(_ENDASH_TOKEN, "--")
+
+
+def latex_escape(value: Any) -> str:
+    r"""Escape a value for LaTeX, rebuilding ``\href{url}{name}``.
+
+    Escapes ``& % $ # _ { } ~ ^ \``; preserves ``---`` and ``--``; and
+    reconstructs any ``\href{url}{name}`` so the URL is emitted verbatim
+    while the visible name is escaped.
+    """
+    text = "" if value is None else str(value)
+    pieces: list[str] = []
+    last = 0
+    for match in _HREF_RE.finditer(text):
+        pieces.append(_escape_plain(text[last : match.start()]))
+        url, name = match.group(1), match.group(2)
+        pieces.append(f"\\href{{{url}}}{{{_escape_plain(name)}}}")
+        last = match.end()
+    pieces.append(_escape_plain(text[last:]))
+    return "".join(pieces)
+
+
+def yaml_str(value: Any) -> str:
+    """Render a scalar as a safe single-line double-quoted YAML string."""
+    text = "" if value is None else str(value)
+    escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def build_latex_env() -> Environment:
+    """Jinja2 env with LaTeX-friendly delimiters (no ``{{`` / ``}}``).
+
+    LaTeX uses ``{`` and ``}`` pervasively, so the default Jinja2
+    delimiters would collide. Expressions use ``\\VAR{ ... }`` and
+    statements use ``\\BLOCK{ ... }`` instead.
+    """
+    # autoescape=False is intentional: the output is LaTeX, not HTML.
+    # HTML autoescaping would corrupt the .tex; escaping is done
+    # explicitly via the `latex` filter. See DECISIONS.md.
+    env = Environment(  # nosec B701
+        loader=FileSystemLoader(str(TEMPLATES_DIR)),
+        autoescape=False,
+        trim_blocks=True,
+        lstrip_blocks=True,
+        keep_trailing_newline=True,
+        block_start_string=r"\BLOCK{",
+        block_end_string="}",
+        variable_start_string=r"\VAR{",
+        variable_end_string="}",
+        comment_start_string=r"\#{",
+        comment_end_string="}",
+    )
+    env.filters["latex"] = latex_escape
+    env.filters["yamlstr"] = yaml_str
+    return env
+
+
+def build_web_env() -> Environment:
+    """Jinja2 env with default delimiters for the YAML web template."""
+    # autoescape=False is intentional: the output is YAML, not HTML.
+    # Scalars are escaped explicitly via the `yamlstr` filter.
+    env = Environment(  # nosec B701
+        loader=FileSystemLoader(str(TEMPLATES_DIR)),
+        autoescape=False,
+        trim_blocks=True,
+        lstrip_blocks=True,
+        keep_trailing_newline=True,
+    )
+    env.filters["latex"] = latex_escape
+    env.filters["yamlstr"] = yaml_str
+    return env
+
+
+# --------------------------------------------------------------------------
+# View-model helpers
+# --------------------------------------------------------------------------
+def _has_target(entry: dict[str, Any], target: str) -> bool:
+    targets = entry.get("targets")
+    if targets is None:
+        targets = DEFAULT_TARGETS
+    return target in targets
+
+
+def _pick(value: Any, lang: str) -> Any:
+    """Pick the language variant of a bilingual mapping, else passthrough."""
+    if isinstance(value, dict) and "de" in value and "en" in value:
+        return value[lang]
+    return value
+
+
+# --------------------------------------------------------------------------
+# LaTeX emission
+# --------------------------------------------------------------------------
+def _latex_experience(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
+    rows = []
+    for entry in data["experience"]:
+        if not _has_target(entry, "latex"):
+            continue
+        rows.append(
+            {
+                "period": _pick(entry["period"], lang),
+                "role": _pick(entry["role"], lang),
+                "org": entry["org"],
+                "location": _pick(entry["location"], lang),
+                "summary": _pick(entry["summary"], lang),
+                "bullets": [_pick(b, lang) for b in entry.get("bullets", []) or []],
+                "subentries": [
+                    {
+                        "date": sub.get("date", ""),
+                        "title": _pick(sub["title"], lang),
+                        "bullets": [
+                            _pick(b, lang) for b in sub.get("bullets", []) or []
+                        ],
+                    }
+                    for sub in entry.get("subentries", []) or []
+                ],
+            }
+        )
+    return rows
+
+
+def _latex_education(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
+    rows = []
+    for entry in data["education"]:
+        if not _has_target(entry, "latex"):
+            continue
+        rows.append(
+            {
+                "period": entry.get("period", ""),
+                "degree": _pick(entry["degree"], lang),
+                "institution": _pick(entry["institution"], lang),
+                "grade": entry.get("grade"),
+                "details": [_pick(d, lang) for d in entry.get("details", []) or []],
+            }
+        )
+    return rows
+
+
+def _latex_conferences(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
+    # Group conferences by year (descending) for the longtable layout.
+    by_year: dict[int, list[dict[str, Any]]] = {}
+    for entry in data["conferences"]:
+        if not _has_target(entry, "latex"):
+            continue
+        by_year.setdefault(entry["year"], []).append(
+            {
+                "name": entry["name"],
+                "location": entry.get("location", ""),
+                "date": entry.get("date", ""),
+                "url": entry.get("url"),
+            }
+        )
+    return [
+        {"year": year, "entries": by_year[year]}
+        for year in sorted(by_year, reverse=True)
+    ]
+
+
+def _latex_skills(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
+    rows = []
+    for entry in data["skills"]:
+        if not _has_target(entry, "latex"):
+            continue
+        rows.append(
+            {
+                "group": _pick(entry["group"], lang),
+                "items": list(entry["items"]),
+            }
+        )
+    return rows
+
+
+def _latex_languages(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
+    rows = []
+    for entry in data["languages"]:
+        if not _has_target(entry, "latex"):
+            continue
+        rows.append(
+            {
+                "name": _pick(entry["name"], lang),
+                "level_label": _pick(entry["level_label"], lang),
+                "level": entry["level"],
+            }
+        )
+    return rows
+
+
+def _latex_interests(data: dict[str, Any], lang: str) -> list[str]:
+    return [
+        _pick(entry, lang) for entry in data["interests"] if _has_target(entry, "latex")
+    ]
+
+
+def _latex_certifications(data: dict[str, Any], lang: str) -> list[str]:
+    return [
+        _pick(entry["text"], lang)
+        for entry in data["certifications"]
+        if _has_target(entry, "latex")
+    ]
+
+
+def _personal_info(data: dict[str, Any], lang: str) -> dict[str, Any]:
+    meta = data["meta"]
+    contact = data["contact"]
+    address = [*list(contact["address"]), "", "", ""]
+    return {
+        "author": meta["author"],
+        "pdf_author": meta["pdf_author"],
+        "title": "Lebenslauf",
+        "subject": meta.get("subject", ""),
+        "display_name": meta["display_name"],
+        "birthdate": contact["birthdate"],
+        "birthplace": contact["birthplace"],
+        "address_one": address[0],
+        "address_two": address[1],
+        "address_three": address[2],
+        "phone": contact["phone"],
+        "email": contact["email"],
+        "location": contact["location_signature"],
+        "photo_path": contact["photo_path"],
+        "signature": contact["signature_path"],
+    }
+
+
+def emit_latex(data: dict[str, Any], style: str, lang: str, out_dir: Path) -> list[str]:
+    env = build_latex_env()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    sections: dict[str, tuple[str, dict[str, Any]]] = {
+        "personal-info": (
+            "personal-info.tex.j2",
+            {
+                "info": _personal_info(data, lang),
+            },
+        ),
+        "experience": (
+            f"{style}/experience.tex.j2",
+            {
+                "rows": _latex_experience(data, lang),
+            },
+        ),
+        "education": (
+            f"{style}/education.tex.j2",
+            {
+                "rows": _latex_education(data, lang),
+            },
+        ),
+        "conferences": (
+            f"{style}/conferences.tex.j2",
+            {
+                "groups": _latex_conferences(data, lang),
+            },
+        ),
+        "skills": (
+            f"{style}/skills.tex.j2",
+            {
+                "rows": _latex_skills(data, lang),
+            },
+        ),
+        "languages": (
+            f"{style}/languages.tex.j2",
+            {
+                "rows": _latex_languages(data, lang),
+            },
+        ),
+        "interests": (
+            f"{style}/interests.tex.j2",
+            {
+                "items": _latex_interests(data, lang),
+            },
+        ),
+        "certifications": (
+            f"{style}/certifications.tex.j2",
+            {
+                "items": _latex_certifications(data, lang),
+            },
+        ),
+    }
+
+    written: list[str] = []
+    for section, (template_name, context) in sections.items():
+        # personal-info is style-agnostic.
+        if section == "personal-info":
+            template = env.get_template("personal-info.tex.j2")
+        else:
+            template = env.get_template(template_name)
+        rendered = template.render(**context, lang=lang, style=style)
+        target = out_dir / LATEX_SECTION_FILES[section]
+        target.write_text(rendered, encoding="utf-8")
+        written.append(target.name)
+    return written
+
+
+# --------------------------------------------------------------------------
+# Web emission
+# --------------------------------------------------------------------------
+def emit_web(data: dict[str, Any], out_dir: Path) -> list[str]:
+    env = build_web_env()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    meta = data["meta"]
+
+    roles = []
+    for entry in data["experience"]:
+        if not _has_target(entry, "web"):
+            continue
+        role = {
+            "period": entry["period"]["en"],
+            "year": entry["year"],
+            "role": entry["role"]["en"],
+            "org": entry["org"],
+            "location": entry["location"]["en"],
+            "kind": entry["kind"],
+            "monogram": entry["monogram"],
+            "bg": entry.get("bg"),
+            "summary": entry["summary"]["en"],
+            "tags": list(entry.get("tags", []) or []),
+            "bullets": [b["en"] for b in entry.get("bullets", []) or []],
+        }
+        logo = entry.get("logo")
+        if logo:  # Omit when null/absent.
+            role["logo"] = logo
+        roles.append(role)
+
+    skills = [
+        {"group": entry["group"]["en"], "items": list(entry["items"])}
+        for entry in data["skills"]
+        if _has_target(entry, "web")
+    ]
+
+    certifications = [
+        entry["text"]["en"]
+        for entry in data["certifications"]
+        if _has_target(entry, "web")
+    ]
+
+    context = {
+        "name": meta["display_name"],
+        "title": meta["title"]["en"],
+        "location": meta["location"]["en"],
+        "summary": meta["summary"]["en"],
+        "roles": roles,
+        "skills": skills,
+        "certifications": certifications,
+    }
+
+    template = env.get_template("web/cv.yml.j2")
+    rendered = template.render(**context)
+    target = out_dir / "cv.yml"
+    target.write_text(rendered, encoding="utf-8")
+    return [target.name]
+
+
+# --------------------------------------------------------------------------
+# CLI
+# --------------------------------------------------------------------------
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", default="data/cv.yaml", type=Path)
+    parser.add_argument("--mode", choices=["latex", "web"], default="latex")
+    parser.add_argument("--style", choices=["plain", "sidebar"], default="plain")
+    parser.add_argument("--lang", choices=["de", "en"], default="de")
+    parser.add_argument("--out-dir", dest="out_dir", type=Path)
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args(argv)
+
+    try:
+        data = load_cv(args.source)
+        validate(data)
+    except CheckError as exc:
+        print(f"::error::cv/parse: {exc}", file=sys.stderr)
+        return 1
+
+    if args.check:
+        print(f"cv/parse: {args.source} is valid.")
+        return 0
+
+    if args.out_dir is None:
+        print("::error::cv/parse: --out-dir is required", file=sys.stderr)
+        return 1
+
+    try:
+        if args.mode == "latex":
+            written = emit_latex(data, args.style, args.lang, args.out_dir)
+            print(
+                f"cv/parse: wrote {len(written)} LaTeX file(s) "
+                f"(style={args.style} lang={args.lang}) to {args.out_dir}: "
+                f"{', '.join(written)}"
+            )
+        else:
+            written = emit_web(data, args.out_dir)
+            print(f"cv/parse: wrote {written[0]} to {args.out_dir}")
+    except CheckError as exc:
+        print(f"::error::cv/parse: {exc}", file=sys.stderr)
+        return 1
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

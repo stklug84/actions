@@ -1,0 +1,184 @@
+---
+# Representative fixture for cv/parse tests. Exercises bilingual fields,
+# subentries, optional logo (present + null), conferences with/without
+# url, and mixed targets (latex-only, web-only, both, absent->default).
+meta:
+  display_name: Steffen Klug
+  author: Dr.\@ rer.\@ nat.\@ Steffen Klug
+  pdf_author: Dr. rer. nat. Steffen Klug
+  lang_default: de
+  title:
+    de: Lebenslauf
+    en: Curriculum Vitae
+  location:
+    de: Deutschland
+    en: Germany
+  summary:
+    de: >-
+      Cloud-Architekt mit Fokus auf Azure, Kubernetes & Developer Experience.
+    en: >-
+      Cloud architect focused on Azure, Kubernetes & the developer experience.
+
+contact:
+  birthdate: 20.09.1984
+  birthplace: Stuttgart
+  address:
+    - Rosa-Leibfried-Str. 5
+    - 71069 Sindelfingen
+    - Deutschland
+  phone: +49 176 42650816
+  email: steffen.klug84@gmail.com
+  location_signature: Sindelfingen
+  photo_path: images/photo.jpg
+  signature_path: images/signature.pdf
+
+experience:
+  - id: bosch
+    targets: [latex, web]
+    period:
+      de: seit 09/2015
+      en: Since 09/2015
+    year: 2015
+    role:
+      de: IT-Systemarchitekt
+      en: Lead Cloud Architect
+    org: Robert Bosch GmbH
+    location:
+      de: Reutlingen
+      en: Reutlingen, Germany
+    kind: work
+    monogram: RB
+    bg: /assets/img/cv/bg/topology.svg
+    logo: /assets/img/cv/logos/bosch.svg
+    summary:
+      de: Aufbau einer AI-Plattform-Architektur im industriellen Umfeld.
+      en: Building an AI platform architecture in an industrial context.
+    tags: [Azure, AKS, Platform Engineering]
+    bullets:
+      - de: Policy-as-Code mit Bicep & GitHub Actions ausgerollt.
+        en: Rolled out policy-as-code with Bicep & GitHub Actions.
+      - de: Self-Service-Onboarding für 30+ Teams entworfen.
+        en: Designed self-service onboarding for 30+ teams.
+    subentries:
+      - date: 2018 -- 2021
+        title:
+          de: Semantic Data Access
+          en: Semantic Data Access
+        bullets:
+          - de: Zusammenführung heterogener Datenquellen.
+            en: Unified heterogeneous data sources.
+          - de: Domänenspezifische Ontologien entwickelt.
+            en: Developed domain-specific ontologies.
+
+  - id: leiden
+    targets: [latex]
+    period:
+      de: 09/2013 --- 08/2015
+      en: 09/2013 --- 08/2015
+    year: 2013
+    role:
+      de: Postdoc
+      en: Postdoc
+    org: Universität Leiden
+    location:
+      de: Niederlande
+      en: Netherlands
+    kind: study
+    monogram: UL
+    bg: /assets/img/cv/bg/grid.svg
+    summary:
+      de: Modellierung nicht-linearer partieller Differentialgleichungen.
+      en: Modelling non-linear partial differential equations.
+    tags: [Physics, Simulation]
+    bullets:
+      - de: Simulation stark korrelierter Materialien.
+        en: Simulated strongly correlated materials.
+
+education:
+  - id: phd
+    targets: [latex, web]
+    period: 05/2010 --- 07/2013
+    degree:
+      de: Promotion in Theoretischer Physik
+      en: PhD in Theoretical Physics
+    institution:
+      de: LMU & MPI für Physik, München
+      en: LMU & MPI for Physics, Munich
+    grade: sehr gut (0,9)
+    details:
+      - de: Dissertation über Gauge/Gravity Duality.
+        en: Dissertation on Gauge/Gravity Duality.
+
+  - id: diploma
+    targets: [latex]
+    period: 09/2006 --- 02/2010
+    degree:
+      de: Diplom in Physik
+      en: Diploma in Physics
+    institution:
+      de: Universität Stuttgart
+      en: University of Stuttgart
+    details:
+      - de: Diplomarbeit über polare Moleküle.
+        en: Thesis on polar molecules.
+
+conferences:
+  - targets: [latex]
+    year: 2021
+    name: Subsurface LIVE Winter 2021
+    location: Online
+    date: 01/2021
+    url: http://subsurfaceconf.com/winter/2021
+  - targets: [latex]
+    year: 2019
+    name: Scala Days 2019
+    location: Lausanne
+    date: 05/2019
+
+skills:
+  - targets: [latex, web]
+    group:
+      de: Cloud
+      en: Cloud
+    items: [Azure, Landing Zones, Networking, Identity]
+  - targets: [latex, web]
+    group:
+      de: IaC & Delivery
+      en: IaC & Delivery
+    items: [Bicep, Terraform, GitHub Actions]
+
+languages:
+  - targets: [latex]
+    name:
+      de: Deutsch
+      en: German
+    level_label:
+      de: Muttersprache
+      en: Native
+    level: 5
+  - targets: [latex]
+    name:
+      de: Englisch
+      en: English
+    level_label:
+      de: Verhandlungssicher
+      en: Fluent
+    level: 5
+
+certifications:
+  - targets: [latex, web]
+    text:
+      de: "Microsoft Certified: Azure Solutions Architect Expert (AZ-305)"
+      en: "Microsoft Certified: Azure Solutions Architect Expert (AZ-305)"
+  - targets: [web]
+    text:
+      de: "Microsoft Certified: DevOps Engineer Expert (AZ-400)"
+      en: "Microsoft Certified: DevOps Engineer Expert (AZ-400)"
+
+interests:
+  - targets: [latex]
+    de: Radfahren
+    en: Cycling
+  - targets: [latex]
+    de: Bergwandern
+    en: Hiking
