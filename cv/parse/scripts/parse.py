@@ -300,9 +300,26 @@ def latex_escape(value: Any) -> str:
     return "".join(pieces)
 
 
+def web_normalize(text: str) -> str:
+    """Normalize LaTeX-style typography to Unicode for the web view.
+
+    The canonical cv.yaml may carry LaTeX dash conventions (``---`` em
+    dash, ``--`` en dash) so the LaTeX emitter can pass them through
+    verbatim. The web view is HTML, so convert them to the real Unicode
+    characters instead of leaking literal ``---`` into the page. Order
+    matters: replace the longer token first.
+    """
+    return text.replace("---", "\u2014").replace("--", "\u2013")
+
+
 def yaml_str(value: Any) -> str:
-    """Render a scalar as a safe single-line double-quoted YAML string."""
+    """Render a scalar as a safe single-line double-quoted YAML string.
+
+    Applies web typography normalization (LaTeX dashes -> Unicode) since
+    this filter is only used by the web (YAML) emitter.
+    """
     text = "" if value is None else str(value)
+    text = web_normalize(text)
     escaped = text.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
 
