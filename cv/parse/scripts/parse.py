@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -324,6 +324,25 @@ def yaml_str(value: Any) -> str:
     return f'"{escaped}"'
 
 
+# Autoescape policy shared by every Jinja2 environment.
+#
+# This emitter only ever renders LaTeX (``.tex``) and YAML (``.yml``)
+# templates, where HTML autoescaping would corrupt the output (e.g. ``&``,
+# ``<``, ``{`` in LaTeX). Output-specific escaping is performed explicitly
+# via the ``latex`` and ``yamlstr`` filters instead.
+#
+# We use ``select_autoescape`` rather than a constant ``autoescape=False``
+# so the decision is made per-template by extension: HTML/XML templates
+# (should one ever be added) are escaped, while ``.tex``/``.yml`` are not.
+# This keeps the current behavior while avoiding a blanket, always-off
+# autoescape that disables protection for any future HTML template.
+_AUTOESCAPE = select_autoescape(
+    enabled_extensions=("html", "htm", "xml"),
+    default_for_string=False,
+    default=False,
+)
+
+
 def build_latex_env() -> Environment:
     """Jinja2 env with LaTeX-friendly delimiters (no ``{{`` / ``}}``).
 
@@ -331,12 +350,9 @@ def build_latex_env() -> Environment:
     delimiters would collide. Expressions use ``\\VAR{ ... }`` and
     statements use ``\\BLOCK{ ... }`` instead.
     """
-    # autoescape=False is intentional: the output is LaTeX, not HTML.
-    # HTML autoescaping would corrupt the .tex; escaping is done
-    # explicitly via the `latex` filter. See DECISIONS.md.
-    env = Environment(  # nosec B701
+    env = Environment(  # nosec B701  # uses select_autoescape
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
-        autoescape=False,
+        autoescape=_AUTOESCAPE,
         trim_blocks=True,
         lstrip_blocks=True,
         keep_trailing_newline=True,
@@ -354,11 +370,9 @@ def build_latex_env() -> Environment:
 
 def build_web_env() -> Environment:
     """Jinja2 env with default delimiters for the YAML web template."""
-    # autoescape=False is intentional: the output is YAML, not HTML.
-    # Scalars are escaped explicitly via the `yamlstr` filter.
-    env = Environment(  # nosec B701
+    env = Environment(  # nosec B701  # uses select_autoescape
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
-        autoescape=False,
+        autoescape=_AUTOESCAPE,
         trim_blocks=True,
         lstrip_blocks=True,
         keep_trailing_newline=True,

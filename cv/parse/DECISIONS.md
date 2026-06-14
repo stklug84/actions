@@ -29,8 +29,13 @@ and view-model construction.
 
 ### Configuration
 
-- `jinja2.Environment(autoescape=False)` — LaTeX/YAML are **not** HTML;
-  HTML autoescaping would corrupt output. Escaping is done explicitly.
+- `jinja2.Environment(autoescape=select_autoescape(...))` — LaTeX/YAML are
+  **not** HTML, so HTML autoescaping would corrupt output; escaping is done
+  explicitly via the `latex`/`yamlstr` filters. We use `select_autoescape`
+  (which resolves to *off* for `.tex`/`.yml` and *on* for any future
+  `.html`/`.xml`) rather than a constant `autoescape=False`, so CodeQL's
+  `py/jinja2/autoescape-false` rule is satisfied without weakening any
+  future HTML template.
 - Custom `latex` filter implementing the spec's escaper: escapes
   `& % $ # _ { } ~ ^ \`, **preserves** `---` and `--` dashes, and
   rebuilds `\href{url}{name}` so URLs survive intact.
