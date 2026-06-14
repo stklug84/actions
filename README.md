@@ -235,6 +235,76 @@ silently skipped.
 | `artifact-name` | —       | Name of the artifact to upload. Required.         |
 | `paths`         | —       | Newline-separated glob list of files. Required.   |
 
+## `cv/parse`
+
+Parse a canonical, bilingual (`de`/`en`) `cv.yaml` — the single source of
+truth — and emit consumer-specific outputs. In **`latex`** mode it writes
+one `.tex` file per section for a selected `style` (`plain` |
+`sidebar`) and `lang` (`de` | `en`), filtered to entries whose `targets`
+contains `latex`. In **`web`** mode it writes a single `cv.yml` in
+skcloud's exact schema (English, filtered to entries whose `targets`
+contains `web`). A `check` mode validates the schema and writes nothing,
+exiting nonzero with a clear message on the first violation. Implemented
+in Python 3 (PyYAML + Jinja2, installed by the wrapper at pinned
+versions); a thin bash step drives it. Requires the repository to be
+checked out first (`actions/checkout`).
+
+```yaml
+# LaTeX: per-section .tex files (sidebar style, German).
+- uses: actions/checkout@v6
+- uses: stklug84/actions/cv/parse@v2
+  with:
+    source: data/cv.yaml
+    mode: latex
+    style: sidebar
+    lang: de
+    out-dir: build/tex
+```
+
+```yaml
+# Web: a single cv.yml in skcloud's schema (English).
+- uses: actions/checkout@v6
+- uses: stklug84/actions/cv/parse@v2
+  with:
+    source: data/cv.yaml
+    mode: web
+    out-dir: _data
+```
+
+```yaml
+# Validate only — write nothing, fail on the first schema violation.
+- uses: actions/checkout@v6
+- uses: stklug84/actions/cv/parse@v2
+  with:
+    source: data/cv.yaml
+    check: "true"
+    out-dir: build/tex   # required by the schema but unused for check
+```
+
+| Input     | Default        | Description                                                       |
+|-----------|----------------|-------------------------------------------------------------------|
+| `source`  | `data/cv.yaml` | Path to the canonical bilingual `cv.yaml`.                        |
+| `mode`    | `latex`        | Output mode — `latex` or `web`.                                   |
+| `style`   | `plain`        | LaTeX style — `plain` or `sidebar` (latex mode only).             |
+| `lang`    | `de`           | Language — `de` or `en` (latex mode; web is always English).      |
+| `out-dir` | —              | Directory the generated files are written into. Required.         |
+| `check`   | `"false"`      | `true` → validate the schema and write nothing (fails on error).  |
+
+Outputs are written as files into `out-dir` (the action sets no step
+outputs):
+
+- **`latex` mode** writes eight per-section files: `personal-info.tex`,
+  `cv-experience.tex`, `cv-education.tex`, `cv-conferences.tex`,
+  `cv-skills.tex`, `cv-languages.tex`, `cv-interests.tex`, and
+  `cv-certifications.tex`.
+- **`web` mode** writes a single `cv.yml`.
+
+In `plain` style the section files emit `longtable` **row bodies** only
+(the consuming document keeps `\subsection*` + `\begin{longtable}{...}`
+and `\input{...}`s the section file). In `sidebar` style they emit calls
+against the `cv-sidebar.sty` public API (`\cventry`, `\cvsubentry`,
+`\cvskillgroup`, `\cvlanguage`, `\cvchip`, `\cvsidelist`).
+
 ## Linting
 
 Pull requests against `main` run the `Lint` workflow
@@ -247,6 +317,10 @@ Pull requests against `main` run the `Lint` workflow
   cover composite actions). Rules: `.shellcheckrc`.
 - **yamllint** — lints all YAML files. Rules: `.yamllint.yml`.
 - **markdownlint** — lints all Markdown files. Rules: `.markdownlint.yaml`.
+- **python-lint** — `ruff` (lint + format check), `mypy` (strict type
+  check), and `bandit` (security; confirms `yaml.safe_load`) on the
+  `cv/parse` Python emitter, plus its golden tests. Config:
+  `cv/parse/pyproject.toml`.
 
 Run locally (requires `shellcheck`, `yq`, `yamllint`, `actionlint`, `npx`):
 
@@ -255,6 +329,19 @@ actionlint
 scripts/shellcheck-actions.sh
 yamllint --strict .
 npx markdownlint-cli2 --config .markdownlint.yaml '**/*.md'
+```
+
+For the `cv/parse` Python (requires `ruff`, `mypy`, `bandit`; install
+with `pip install --user ruff==0.8.6 mypy==1.14.1 bandit==1.8.0
+PyYAML==6.0.2 Jinja2==3.1.5 types-PyYAML==6.0.12.20241230`):
+
+```bash
+cd cv/parse
+ruff check .
+ruff format --check .
+mypy scripts/parse.py
+bandit -r scripts -q
+bash test/run-tests.sh
 ```
 
 ## Contributing

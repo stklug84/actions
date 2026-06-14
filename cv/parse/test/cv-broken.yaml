@@ -1,0 +1,90 @@
+---
+# Intentionally broken fixture for --check failure tests. Violates
+# multiple rules; the first violation reported is languages[0].level
+# out of range (1..5). (Top-level keys are all present so the failure
+# is a deeper, more meaningful one.)
+meta:
+  display_name: Jane Doe
+  author: Jane Doe
+  pdf_author: Jane Doe
+  lang_default: de
+  title:
+    de: Lebenslauf
+    en: Curriculum Vitae
+  location:
+    de: Deutschland
+    en: Germany
+  summary:
+    de: Zusammenfassung.
+    en: Summary.
+
+contact:
+  birthdate: 01.01.1990
+  birthplace: Springfield
+  address:
+    - 123 Example St
+  phone: +49 000 0000000
+  email: jane.doe@example.com
+  location_signature: Anytown
+  photo_path: images/photo.jpg
+  signature_path: images/signature.pdf
+
+experience:
+  - id: acme
+    targets: [latex, web]
+    period:
+      de: seit 09/2015
+      en: Since 09/2015
+    year: 2015
+    role:
+      de: IT-Systemarchitekt
+      en: Lead Cloud Architect
+    org: Example Corp
+    location:
+      de: Anytown
+      en: Anytown
+    kind: work
+    monogram: RB
+    bg: /assets/img/cv/bg/topology.svg
+    summary:
+      de: Zusammenfassung.
+      en: Summary.
+    tags: [Azure]
+    bullets:
+      - de: Bullet.
+        en: Bullet.
+
+education:
+  - id: phd
+    targets: [latex]
+    period: 05/2010 --- 07/2013
+    degree:
+      de: Promotion
+      en: PhD
+    institution:
+      de: Example University
+      en: Example University
+    details: []
+
+conferences: []
+
+skills:
+  - targets: [web]
+    group:
+      de: Cloud
+      en: Cloud
+    items: [Azure]
+
+languages:
+  - targets: [latex]
+    name:
+      de: Deutsch
+      en: German
+    level_label:
+      de: Muttersprache
+      en: Native
+    level: 9   # INVALID: must be 1..5
+
+certifications: []
+
+interests: []

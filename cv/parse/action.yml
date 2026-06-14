@@ -1,0 +1,85 @@
+---
+# Composite action: parse a canonical bilingual cv.yaml and emit
+# consumer-specific outputs.
+#
+# Reads a single source-of-truth data/cv.yaml (bilingual de/en) and
+# renders either:
+#   - LaTeX mode: several per-section .tex files for a selected --style
+#     (plain | sidebar) and --lang (de | en), filtered to entries whose
+#     `targets` contains `latex`.
+#   - Web mode: a single cv.yml in skcloud's exact schema (English,
+#     filtered to entries whose `targets` contains `web`).
+#
+# A --check mode validates the schema and writes nothing, exiting
+# nonzero with a clear message on the first violation.
+#
+# Implementation: a thin bash wrapper (scripts/run.sh) invokes the
+# Python emitter (scripts/parse.py) with inputs passed via environment
+# variables, mirroring texlive/discover-variants. Python 3 is
+# preinstalled on ubuntu-latest; PyYAML and Jinja2 are installed at the
+# pinned versions by the wrapper.
+#
+# Usage (LaTeX):
+#   - uses: actions/checkout@v6
+#   - uses: stklug84/actions/cv/parse@v2
+#     with:
+#       mode: latex
+#       style: sidebar
+#       lang: de
+#       out-dir: build/tex
+#
+# Usage (web):
+#   - uses: actions/checkout@v6
+#   - uses: stklug84/actions/cv/parse@v2
+#     with:
+#       mode: web
+#       out-dir: _data
+name: Parse CV
+description: >-
+  Parse a canonical bilingual cv.yaml and emit per-section LaTeX .tex
+  files (plain | sidebar style, de | en) or a single skcloud-schema
+  cv.yml for the web, with a schema --check mode.
+
+inputs:
+  source:
+    description: Path to the canonical bilingual cv.yaml.
+    required: false
+    default: "data/cv.yaml"
+  mode:
+    description: Output mode — `latex` or `web`.
+    required: false
+    default: "latex"
+  style:
+    description: LaTeX style — `plain` or `sidebar` (latex mode only).
+    required: false
+    default: "plain"
+  lang:
+    description: Language — `de` or `en` (latex mode; web is always en).
+    required: false
+    default: "de"
+  out-dir:
+    description: Directory the generated files are written into.
+    required: true
+  check:
+    description: >-
+      When `true`, validate the schema and write nothing (exits nonzero
+      with a clear message on the first violation).
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Parse CV and emit outputs
+      id: parse
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.source }}
+        MODE: ${{ inputs.mode }}
+        STYLE: ${{ inputs.style }}
+        CV_LANG: ${{ inputs.lang }}
+        OUT_DIR: ${{ inputs.out-dir }}
+        CHECK: ${{ inputs.check }}
+      run: |
+        set -euo pipefail
+        "$GITHUB_ACTION_PATH/scripts/run.sh"
