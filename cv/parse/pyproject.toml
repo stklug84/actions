@@ -1,0 +1,47 @@
+# Tooling configuration for the cv/parse composite action's Python.
+# Scoped to this directory (cv/parse) so the rest of the repository —
+# which is bash + YAML — is untouched. Tools are run from here:
+#   ruff check . && ruff format --check .
+#   mypy scripts/parse.py
+#   bandit -r scripts
+[project]
+name = "cv-parse"
+version = "0.0.0"
+description = "Composite-action emitter: canonical cv.yaml -> LaTeX / web."
+requires-python = ">=3.9"
+
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+extend-exclude = ["test/golden"]
+
+[tool.ruff.lint]
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes
+  "W",    # pycodestyle warnings
+  "I",    # isort
+  "UP",   # pyupgrade
+  "B",    # flake8-bugbear
+  "C4",   # flake8-comprehensions
+  "SIM",  # flake8-simplify
+  "RUF",  # ruff-specific
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.9"
+files = ["scripts/parse.py"]
+strict = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+
+[tool.bandit]
+# Scan the emitter sources; tests/goldens are data, not runtime code.
+exclude_dirs = ["test"]
