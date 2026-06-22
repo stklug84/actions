@@ -9,12 +9,16 @@
 #	tr
 # @description:
 #	Discover LaTeX document variants under a root directory and emit
-#	a GitHub Actions matrix. Each variant subdirectory must contain
-#	exactly one *.tex file with \documentclass; an optional .engine
-#	dotfile selects the build engine (latexmk | pdflatex | xelatex |
-#	latex-chain). Prints single-line JSON {"include":[...]} to
-#	stdout for strategy.matrix via fromJson(); diagnostics go to
-#	stderr so stdout stays machine-readable.
+#	a GitHub Actions matrix. The tree is scanned RECURSIVELY: any
+#	directory at any depth that contains exactly one *.tex file with
+#	\documentclass is a variant. An optional .engine dotfile selects
+#	the build engine (latexmk | pdflatex | xelatex | latex-chain).
+#	The variant `name` is the directory path relative to <root> with
+#	'/' replaced by '-', so nested layouts (e.g. cvs/<group>/<style>/)
+#	yield unique names; single-level layouts keep their basename.
+#	Prints single-line JSON {"include":[...]} to stdout for
+#	strategy.matrix via fromJson(); diagnostics go to stderr so stdout
+#	stays machine-readable.
 # @arguments:
 #	<root>
 #	[default-engine] (default: latexmk)
@@ -34,11 +38,38 @@ if [ ! -d "$ROOT" ] || [ -z "$(ls -A "$ROOT" 2>/dev/null || true)" ]; then
   exit 1
 fi
 
+ROOT="${ROOT%/}"
+
+# Collect every directory (any depth) that holds at least one *.tex with
+# a \documentclass line. We grep for the marker across the whole tree and
+# reduce the matching files to their unique containing directories. This
+# keeps the discovery recursive without relying on `find -path` globs.
+variant_dirs=()
+while IFS= read -r d; do
+  [ -n "$d" ] && variant_dirs+=("$d")
+done < <(
+  grep -rl '^[[:space:]]*\\documentclass' --include='*.tex' "$ROOT" 2>/dev/null \
+    | while IFS= read -r f; do dirname "$f"; done \
+    | sort -u
+)
+
+if [ "${#variant_dirs[@]}" -eq 0 ]; then
+  err "No variants found. Expected a directory under $ROOT/ with a main .tex (file with \\documentclass)."
+  exit 1
+fi
+
 entries=()
-for dir in "$ROOT"/*/; do
-  [ -d "$dir" ] || continue
+for dir in "${variant_dirs[@]}"; do
   dir="${dir%/}"
-  name="$(basename "$dir")"
+
+  # Variant name = path relative to ROOT with '/' -> '-'. Direct children
+  # of ROOT therefore keep their basename (backward compatible).
+  rel="${dir#"$ROOT"/}"
+  if [ "$rel" = "$dir" ]; then
+    # dir == ROOT itself (a main .tex directly under root); use basename.
+    rel="$(basename "$dir")"
+  fi
+  name="$(printf '%s' "$rel" | tr '/' '-')"
 
   # Find exactly one *.tex with \documentclass in the directory.
   # (while-read instead of mapfile for bash 3.2 / macOS portability)

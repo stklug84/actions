@@ -2,12 +2,16 @@
 # Composite action: discover LaTeX document variants and emit a build
 # matrix.
 #
-# Scans every subdirectory of `root` for exactly one *.tex with
-# \documentclass, resolves the engine from an optional `.engine`
-# dotfile (latexmk | pdflatex | xelatex | latex-chain; default:
-# `default-engine`), and detects auxiliary toolchain requirements per
-# variant (bibtex/biblatex, makeindex, glossaries, psfrag). Emits a
-# JSON `{"include":[...]}` matrix for `strategy.matrix` via fromJson().
+# Scans `root` RECURSIVELY: any directory at any depth that holds
+# exactly one *.tex with \documentclass is a variant. Resolves the
+# engine from an optional `.engine` dotfile (latexmk | pdflatex |
+# xelatex | latex-chain; default: `default-engine`), and detects
+# auxiliary toolchain requirements per variant (bibtex/biblatex,
+# makeindex, glossaries, psfrag). The variant `name` is the directory
+# path relative to `root` with '/' replaced by '-', so nested layouts
+# (e.g. cvs/<group>/<style>/) yield unique names while direct children
+# of `root` keep their basename (backward compatible). Emits a JSON
+# `{"include":[...]}` matrix for `strategy.matrix` via fromJson().
 # Each entry feeds texlive/build-pdf directly. The multi-variant
 # counterpart to texlive/detect (which targets a single root document).
 #

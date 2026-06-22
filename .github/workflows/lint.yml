@@ -1,18 +1,18 @@
 ---
-# title: Lint workflow
-# authors:
-#   - Steffen Klug <45033201+stklug84@users.noreply.github.com>
-# date: 2026-06-10
-# keywords: [infrastructure, linting]
-# comment: |
-#   Lints the repository on pull requests against main:
-#     - actionlint   : .github/workflows/* (incl. shellcheck on run: steps)
-#     - shellcheck   : bash run: blocks inside composite action.yml files
-#     - yamllint     : all YAML files (.yamllint.yml)
-#     - markdownlint : all Markdown files (.markdownlint.yml)
-#     - python-lint  : ruff (lint+format), mypy, bandit on cv/parse
-#                      (config: cv/parse/pyproject.toml)
-# ---
+# @author:
+# 	Steffen Klug <45033201+stklug84@users.noreply.github.com>
+# @date:
+# 	2026-06-10
+# @keywords:
+# 	infrastructure, linting
+# @description:
+# 	Lints the repository on pull requests against main:
+# 	  - actionlint   : .github/workflows/* (incl. shellcheck on run: steps)
+# 	  - shellcheck   : bash run: blocks inside composite action.yml files
+# 	  - yamllint     : all YAML files (.yamllint.yml)
+# 	  - markdownlint : all Markdown files (.markdownlint.yml)
+# 	  - python-lint  : ruff (lint+format), mypy, bandit on cv/parse and
+# 	                   cv/generate (each with its own pyproject.toml)
 name: Lint
 
 on:
@@ -95,7 +95,7 @@ jobs:
           globs: '**/*.md'
 
   python-lint:
-    name: python-lint (cv/parse)
+    name: python-lint (cv/parse, cv/generate)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -113,28 +113,28 @@ jobs:
             types-PyYAML==6.0.12.20241230
 
       - name: Run ruff (lint)
-        working-directory: cv/parse
         run: |
           set -euo pipefail
-          ruff check .
+          (cd cv/parse && ruff check .)
+          (cd cv/generate && ruff check .)
 
       - name: Run ruff (format check)
-        working-directory: cv/parse
         run: |
           set -euo pipefail
-          ruff format --check .
+          (cd cv/parse && ruff format --check .)
+          (cd cv/generate && ruff format --check .)
 
       - name: Run mypy
-        working-directory: cv/parse
         run: |
           set -euo pipefail
-          mypy scripts/parse.py
+          (cd cv/parse && mypy scripts/parse.py)
+          (cd cv/generate && mypy scripts/render_variants.py)
 
       - name: Run bandit
-        working-directory: cv/parse
         run: |
           set -euo pipefail
-          bandit -r scripts -q
+          (cd cv/parse && bandit -r scripts -q)
+          (cd cv/generate && bandit -r scripts -q)
 
       - name: Run cv/parse golden tests
         run: |

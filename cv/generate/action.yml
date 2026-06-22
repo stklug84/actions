@@ -1,0 +1,79 @@
+---
+# Composite action: generate a per-variant CV tree from a build matrix.
+#
+# Expands the matrix declared in a manifest (default data/variants.yml)
+# into a tree of CV variants:
+#
+#   <cvs-root>/<yaml>-<lang>/<style>/<main>.tex   (+ .engine + bodies)
+#
+# For every cvs.<yaml> entry's {style, lang} leaf it renders the leaf
+# main from <templates-dir>/<style>.tex.j2 (Jinja2), writes the engine
+# dotfile from the style registry, and emits the per-section bodies
+# (cv-*.tex + personal-info.tex) via the sibling cv/parse emitter. The
+# matrix lives entirely in the manifest, so any (yaml x style x lang)
+# combination is generated without changing this action or the caller.
+#
+# With check: true, validates every YAML referenced by the manifest
+# against the cv/parse schema and writes nothing.
+#
+# The caller MUST run actions/checkout before this action; it reads the
+# repository's manifest, templates and source YAMLs from the workspace.
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - uses: stklug84/actions/cv/generate@v2
+#     with:
+#       manifest: data/variants.yml
+#       templates-dir: templates
+#       cvs-root: cvs
+#       data-dir: data
+name: Generate CV variant tree
+description: >-
+  Expand a CV build matrix manifest into a per-variant tree (one main
+  .tex + .engine + cv/parse section bodies per leaf), rendering each
+  leaf main from a per-style Jinja2 template.
+
+inputs:
+  manifest:
+    description: Path to the build matrix manifest (styles + langs + cvs).
+    required: false
+    default: "data/variants.yml"
+  templates-dir:
+    description: Directory of per-style Jinja2 main templates (<style>.tex.j2).
+    required: false
+    default: "templates"
+  cvs-root:
+    description: Output root the variant tree is written under.
+    required: false
+    default: "cvs"
+  data-dir:
+    description: Directory holding the source YAMLs referenced by the manifest.
+    required: false
+    default: "data"
+  main-name:
+    description: Basename (without .tex) for every generated leaf main.
+    required: false
+    default: "sklug-cv"
+  check:
+    description: >-
+      When `true`, validate every manifest YAML against the cv/parse
+      schema and write nothing (exits nonzero on the first violation).
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Generate CV variant tree
+      id: generate
+      shell: bash
+      env:
+        MANIFEST: ${{ inputs.manifest }}
+        TEMPLATES_DIR: ${{ inputs.templates-dir }}
+        CVS_ROOT: ${{ inputs.cvs-root }}
+        DATA_DIR: ${{ inputs.data-dir }}
+        MAIN_NAME: ${{ inputs.main-name }}
+        CHECK: ${{ inputs.check }}
+      run: |
+        set -euo pipefail
+        "$GITHUB_ACTION_PATH/scripts/run.sh"

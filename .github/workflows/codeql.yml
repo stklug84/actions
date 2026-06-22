@@ -1,22 +1,22 @@
 ---
-# title: CodeQL workflow
-# authors:
-#   - Steffen Klug <45033201+stklug84@users.noreply.github.com>
-# date: 2026-06-10
-# keywords: [infrastructure, security]
-# comment: |
-#   CodeQL code scanning over a language matrix:
-#     - actions : .github/workflows/* and the composite action.yml files
-#                 (expression injection, excessive permissions, untrusted
-#                 checkout, artifact/cache poisoning, ...).
-#     - python  : the cv/parse emitter (scripts/parse.py) — taint, unsafe
-#                 deserialization, path traversal, command/template
-#                 injection, ...
-#   Both use build-mode `none` (no compilation needed) and the
-#   security-extended suite, which adds the unpinned-tag query for
-#   actions. Bash code is not a CodeQL language and is covered by
-#   shellcheck in the Lint workflow instead.
-# ---
+# @author:
+# 	Steffen Klug <45033201+stklug84@users.noreply.github.com>
+# @date:
+# 	2026-06-10
+# @keywords:
+# 	infrastructure, security
+# @description:
+# 	CodeQL code scanning over a language matrix:
+# 	  - actions : .github/workflows/* and the composite action.yml files
+# 	              (expression injection, excessive permissions, untrusted
+# 	              checkout, artifact/cache poisoning, ...).
+# 	  - python  : the cv/parse emitter (scripts/parse.py) — taint, unsafe
+# 	              deserialization, path traversal, command/template
+# 	              injection, ...
+# 	Both use build-mode `none` (no compilation needed) and the
+# 	security-extended suite, which adds the unpinned-tag query for
+# 	actions. Bash code is not a CodeQL language and is covered by
+# 	shellcheck in the Lint workflow instead.
 name: CodeQL
 
 on:

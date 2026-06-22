@@ -11,8 +11,7 @@
 #	STYLE (plain | sidebar, latex only), CV_LANG (de | en — named
 #	CV_LANG, not LANG, to avoid clobbering the system locale),
 #	OUT_DIR (output directory), and CHECK ('true'/'false' — validate
-#	only,
-#	write nothing). Ensures PyYAML and Jinja2 are present at the
+#	only, write nothing). Ensures PyYAML and Jinja2 are present at the
 #	pinned versions (installed with `pip --user` when missing), then
 #	dispatches to parse.py. SCRIPT_DIR is resolved from BASH_SOURCE
 #	so the action works regardless of the caller's working
