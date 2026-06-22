@@ -59,6 +59,28 @@ LATEX_SECTION_FILES = {
     "certifications": "cv-certifications.tex",
 }
 
+# Selectable ``--style`` values. ``plain`` and ``sidebar`` are the original
+# layouts; ``pw``/``dh``/``vs``/``fs``/``ia`` reproduce the example CVs in the
+# curriculum-vitae repo (styles/cv-{sidebar-pw,sidebar-dh,sidebar-vs,
+# banking-fs,tagged-ia}.sty).
+LATEX_STYLES = ["plain", "sidebar", "pw", "dh", "vs", "fs", "ia"]
+
+# Style -> template subdirectory. Several example-CV styles share the
+# ``sidebar`` macro API (\cventry/\cvsection/\cvskillgroup/...), so they reuse
+# its templates instead of duplicating them. Styles with a distinct macro
+# surface (single-column ``fs``/``ia``) get their own template directory.
+# A style absent from this map renders from its own ``<style>/`` directory.
+STYLE_TEMPLATE_DIRS = {
+    "pw": "sidebar",
+    "dh": "sidebar",
+    "vs": "sidebar",
+}
+
+
+def _template_dir(style: str) -> str:
+    """Resolve the template subdirectory for a ``--style`` value."""
+    return STYLE_TEMPLATE_DIRS.get(style, style)
+
 
 class CheckError(Exception):
     """A schema validation failure with a human-readable message."""
@@ -586,6 +608,10 @@ def emit_latex(data: dict[str, Any], style: str, lang: str, out_dir: Path) -> li
     env = build_latex_env()
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Several example-CV styles share another style's templates (see
+    # STYLE_TEMPLATE_DIRS); resolve the directory once here.
+    tdir = _template_dir(style)
+
     sections: dict[str, tuple[str, dict[str, Any]]] = {
         "personal-info": (
             "personal-info.tex.j2",
@@ -594,43 +620,43 @@ def emit_latex(data: dict[str, Any], style: str, lang: str, out_dir: Path) -> li
             },
         ),
         "experience": (
-            f"{style}/experience.tex.j2",
+            f"{tdir}/experience.tex.j2",
             {
                 "rows": _latex_experience(data, lang),
             },
         ),
         "education": (
-            f"{style}/education.tex.j2",
+            f"{tdir}/education.tex.j2",
             {
                 "rows": _latex_education(data, lang),
             },
         ),
         "conferences": (
-            f"{style}/conferences.tex.j2",
+            f"{tdir}/conferences.tex.j2",
             {
                 "groups": _latex_conferences(data, lang),
             },
         ),
         "skills": (
-            f"{style}/skills.tex.j2",
+            f"{tdir}/skills.tex.j2",
             {
                 "rows": _latex_skills(data, lang),
             },
         ),
         "languages": (
-            f"{style}/languages.tex.j2",
+            f"{tdir}/languages.tex.j2",
             {
                 "rows": _latex_languages(data, lang),
             },
         ),
         "interests": (
-            f"{style}/interests.tex.j2",
+            f"{tdir}/interests.tex.j2",
             {
                 "items": _latex_interests(data, lang),
             },
         ),
         "certifications": (
-            f"{style}/certifications.tex.j2",
+            f"{tdir}/certifications.tex.j2",
             {
                 "items": _latex_certifications(data, lang),
             },
@@ -717,7 +743,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", default="data/cv.yml", type=Path)
     parser.add_argument("--mode", choices=["latex", "web"], default="latex")
-    parser.add_argument("--style", choices=["plain", "sidebar"], default="plain")
+    parser.add_argument("--style", choices=LATEX_STYLES, default="plain")
     parser.add_argument("--lang", choices=["de", "en"], default="de")
     parser.add_argument("--out-dir", dest="out_dir", type=Path)
     parser.add_argument("--check", action="store_true")

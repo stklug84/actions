@@ -285,7 +285,7 @@ checked out first (`actions/checkout`).
 |-----------|----------------|-------------------------------------------------------------------|
 | `source`  | `data/cv.yml`  | Path to the canonical bilingual `cv.yml`.                         |
 | `mode`    | `latex`        | Output mode — `latex` or `web`.                                   |
-| `style`   | `plain`        | LaTeX style — `plain` or `sidebar` (latex mode only).             |
+| `style`   | `plain`        | LaTeX style (latex mode only) — `plain`, `sidebar`, or an example-CV style `pw`/`dh`/`vs`/`fs`/`ia`. |
 | `lang`    | `de`           | Language — `de` or `en` (latex mode; web is always English).      |
 | `out-dir` | —              | Directory the generated files are written into. Required.         |
 | `check`   | `"false"`      | `true` → validate the schema and write nothing (fails on error).  |
@@ -304,6 +304,14 @@ In `plain` style the section files emit `longtable` **row bodies** only
 and `\input{...}`s the section file). In `sidebar` style they emit calls
 against the `cv-sidebar.sty` public API (`\cventry`, `\cvsubentry`,
 `\cvskillgroup`, `\cvlanguage`, `\cvchip`, `\cvsidelist`).
+
+The example-CV styles `pw`, `dh`, `vs`, `fs`, and `ia` reproduce the
+visual language of the example résumés in the `curriculum-vitae` repo
+(`styles/cv-{sidebar-pw,sidebar-dh,sidebar-vs,banking-fs,tagged-ia}.sty`).
+They all share the same public macro API as `sidebar`, so `pw`/`dh`/`vs`
+reuse the `sidebar` templates verbatim (see `STYLE_TEMPLATE_DIRS` in
+`scripts/parse.py`); the single-column `fs` and `ia` render from their own
+`templates/{fs,ia}/` directories to allow future divergence.
 
 ## Linting
 

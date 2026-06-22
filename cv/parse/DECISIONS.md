@@ -42,6 +42,14 @@ and view-model construction.
 - `trim_blocks=True`, `lstrip_blocks=True`, `keep_trailing_newline=True`
   for predictable whitespace in the generated `.tex`/`.yml`.
 - Templates loaded from `scripts/templates/` via `FileSystemLoader`.
+- Example-CV styles (`pw`, `dh`, `vs`, `fs`, `ia`) are selectable via
+  `--style`. They share the `sidebar` public macro API, so `pw`/`dh`/`vs`
+  alias the `sidebar` templates through `STYLE_TEMPLATE_DIRS` (no
+  duplication); the single-column `fs`/`ia` keep their own
+  `templates/{fs,ia}/` directories so they can diverge later. The
+  `_template_dir(style)` helper resolves the directory; the per-style
+  goldens (`test/golden/{pw-de,dh-de,vs-en,fs-en,ia-de}`) lock both the
+  alias identity and the dedicated templates.
 
 ### Web emitter note
 
