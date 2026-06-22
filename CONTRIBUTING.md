@@ -80,7 +80,7 @@ pushing (requires `actionlint`, `shellcheck`, `yq`, `yamllint`, `npx`):
 actionlint
 scripts/shellcheck-actions.sh
 yamllint --strict .
-npx markdownlint-cli2 --config .markdownlint.yaml '**/*.md'
+npx markdownlint-cli2 --config .markdownlint.yml '**/*.md'
 ```
 
 | Check        | Configuration        | Scope                                  |
@@ -88,7 +88,7 @@ npx markdownlint-cli2 --config .markdownlint.yaml '**/*.md'
 | actionlint   | built-in             | `.github/workflows/*`                  |
 | shellcheck   | `.shellcheckrc`      | bash in composite actions and scripts  |
 | yamllint     | `.yamllint.yml`      | all YAML files                         |
-| markdownlint | `.markdownlint.yaml` | all Markdown files                     |
+| markdownlint | `.markdownlint.yml`  | all Markdown files                     |
 
 ## Code scanning
 

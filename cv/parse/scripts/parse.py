@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parse a canonical bilingual ``cv.yaml`` and emit consumer outputs.
+"""Parse a canonical bilingual ``cv.yml`` and emit consumer outputs.
 
 Two output modes:
 
@@ -68,7 +68,7 @@ class CheckError(Exception):
 # Loading
 # --------------------------------------------------------------------------
 def load_cv(path: Path) -> dict[str, Any]:
-    """Load the canonical cv.yaml with ``yaml.safe_load`` only."""
+    """Load the canonical cv.yml with ``yaml.safe_load`` only."""
     if not path.is_file():
         raise CheckError(f"source not found: {path}")
     with path.open(encoding="utf-8") as handle:
@@ -303,7 +303,7 @@ def latex_escape(value: Any) -> str:
 def web_normalize(text: str) -> str:
     """Normalize LaTeX-style typography to Unicode for the web view.
 
-    The canonical cv.yaml may carry LaTeX dash conventions (``---`` em
+    The canonical cv.yml may carry LaTeX dash conventions (``---`` em
     dash, ``--`` en dash) so the LaTeX emitter can pass them through
     verbatim. The web view is HTML, so convert them to the real Unicode
     characters instead of leaking literal ``---`` into the page. Order
@@ -666,7 +666,7 @@ def emit_web(data: dict[str, Any], out_dir: Path) -> list[str]:
 # --------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", default="data/cv.yaml", type=Path)
+    parser.add_argument("--source", default="data/cv.yml", type=Path)
     parser.add_argument("--mode", choices=["latex", "web"], default="latex")
     parser.add_argument("--style", choices=["plain", "sidebar"], default="plain")
     parser.add_argument("--lang", choices=["de", "en"], default="de")

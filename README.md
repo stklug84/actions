@@ -237,7 +237,7 @@ silently skipped.
 
 ## `cv/parse`
 
-Parse a canonical, bilingual (`de`/`en`) `cv.yaml` — the single source of
+Parse a canonical, bilingual (`de`/`en`) `cv.yml` — the single source of
 truth — and emit consumer-specific outputs. In **`latex`** mode it writes
 one `.tex` file per section for a selected `style` (`plain` |
 `sidebar`) and `lang` (`de` | `en`), filtered to entries whose `targets`
@@ -254,7 +254,7 @@ checked out first (`actions/checkout`).
 - uses: actions/checkout@v6
 - uses: stklug84/actions/cv/parse@v2
   with:
-    source: data/cv.yaml
+    source: data/cv.yml
     mode: latex
     style: sidebar
     lang: de
@@ -266,7 +266,7 @@ checked out first (`actions/checkout`).
 - uses: actions/checkout@v6
 - uses: stklug84/actions/cv/parse@v2
   with:
-    source: data/cv.yaml
+    source: data/cv.yml
     mode: web
     out-dir: _data
 ```
@@ -276,14 +276,14 @@ checked out first (`actions/checkout`).
 - uses: actions/checkout@v6
 - uses: stklug84/actions/cv/parse@v2
   with:
-    source: data/cv.yaml
+    source: data/cv.yml
     check: "true"
     out-dir: build/tex   # required by the schema but unused for check
 ```
 
 | Input     | Default        | Description                                                       |
 |-----------|----------------|-------------------------------------------------------------------|
-| `source`  | `data/cv.yaml` | Path to the canonical bilingual `cv.yaml`.                        |
+| `source`  | `data/cv.yml`  | Path to the canonical bilingual `cv.yml`.                         |
 | `mode`    | `latex`        | Output mode — `latex` or `web`.                                   |
 | `style`   | `plain`        | LaTeX style — `plain` or `sidebar` (latex mode only).             |
 | `lang`    | `de`           | Language — `de` or `en` (latex mode; web is always English).      |
@@ -316,7 +316,7 @@ Pull requests against `main` run the `Lint` workflow
   `action.yml` files via `scripts/shellcheck-actions.sh` (actionlint does not
   cover composite actions). Rules: `.shellcheckrc`.
 - **yamllint** — lints all YAML files. Rules: `.yamllint.yml`.
-- **markdownlint** — lints all Markdown files. Rules: `.markdownlint.yaml`.
+- **markdownlint** — lints all Markdown files. Rules: `.markdownlint.yml`.
 - **python-lint** — `ruff` (lint + format check), `mypy` (strict type
   check), and `bandit` (security; confirms `yaml.safe_load`) on the
   `cv/parse` Python emitter, plus its golden tests. Config:
@@ -328,7 +328,7 @@ Run locally (requires `shellcheck`, `yq`, `yamllint`, `actionlint`, `npx`):
 actionlint
 scripts/shellcheck-actions.sh
 yamllint --strict .
-npx markdownlint-cli2 --config .markdownlint.yaml '**/*.md'
+npx markdownlint-cli2 --config .markdownlint.yml '**/*.md'
 ```
 
 For the `cv/parse` Python (requires `ruff`, `mypy`, `bandit`; install

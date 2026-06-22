@@ -7,12 +7,12 @@
 # @description:
 #	Golden test entrypoint for the cv/parse composite action.
 #	Regenerates every output variant from the representative fixture
-#	(test/cv.yaml) into a scratch directory and diffs each file
+#	(test/cv.yml) into a scratch directory and diffs each file
 #	against the committed goldens under test/golden/. Covers the
 #	five required variants: latex/plain/{de,en}, latex/sidebar/{de,
 #	en}, and web. Also asserts that --check passes on the valid
 #	fixture and fails (nonzero, with a message) on test/cv-broken.
-#	yaml. PYTHONPATH is exported so parse.py is importable; the
+#	yml. PYTHONPATH is exported so parse.py is importable; the
 #	script invokes parse.py directly via its CLI. Run from anywhere.
 # @arguments:
 #	none
@@ -26,8 +26,8 @@ PYTHON="${PYTHON:-python3}"
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PARSE_DIR="$(cd "$TEST_DIR/.." && pwd)"
 PARSE_PY="$PARSE_DIR/scripts/parse.py"
-FIXTURE="$TEST_DIR/cv.yaml"
-BROKEN="$TEST_DIR/cv-broken.yaml"
+FIXTURE="$TEST_DIR/cv.yml"
+BROKEN="$TEST_DIR/cv-broken.yml"
 GOLDEN_DIR="$TEST_DIR/golden"
 
 export PYTHONPATH="$PARSE_DIR/scripts${PYTHONPATH:+:$PYTHONPATH}"

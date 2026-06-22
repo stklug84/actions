@@ -9,7 +9,7 @@
 #     - actionlint   : .github/workflows/* (incl. shellcheck on run: steps)
 #     - shellcheck   : bash run: blocks inside composite action.yml files
 #     - yamllint     : all YAML files (.yamllint.yml)
-#     - markdownlint : all Markdown files (.markdownlint.yaml)
+#     - markdownlint : all Markdown files (.markdownlint.yml)
 #     - python-lint  : ruff (lint+format), mypy, bandit on cv/parse
 #                      (config: cv/parse/pyproject.toml)
 # ---
@@ -91,7 +91,7 @@ jobs:
       - name: Run markdownlint
         uses: DavidAnson/markdownlint-cli2-action@v23
         with:
-          config: .markdownlint.yaml
+          config: .markdownlint.yml
           globs: '**/*.md'
 
   python-lint:

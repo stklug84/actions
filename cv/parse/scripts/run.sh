@@ -7,7 +7,7 @@
 # @description:
 #	Thin wrapper around scripts/parse.py for the cv/parse composite
 #	action. Driven entirely by environment variables set in
-#	action.yml: SOURCE (canonical cv.yaml), MODE (latex | web),
+#	action.yml: SOURCE (canonical cv.yml), MODE (latex | web),
 #	STYLE (plain | sidebar, latex only), CV_LANG (de | en — named
 #	CV_LANG, not LANG, to avoid clobbering the system locale),
 #	OUT_DIR (output directory), and CHECK ('true'/'false' — validate
@@ -20,7 +20,7 @@
 # @arguments:
 #	none (configured via environment variables, see @description)
 ## Usage: SOURCE=<path> MODE=<latex|web> [STYLE=..] [CV_LANG=..] OUT_DIR=<dir> [CHECK=true] run.sh
-### Example: MODE=web OUT_DIR=_data SOURCE=data/cv.yaml run.sh
+### Example: MODE=web OUT_DIR=_data SOURCE=data/cv.yml run.sh
 
 set -euo pipefail
 
@@ -28,7 +28,7 @@ set -euo pipefail
 PYYAML_VERSION="6.0.2"
 JINJA2_VERSION="3.1.5"
 
-SOURCE="${SOURCE:-data/cv.yaml}"
+SOURCE="${SOURCE:-data/cv.yml}"
 MODE="${MODE:-latex}"
 STYLE="${STYLE:-plain}"
 LANG_IN="${CV_LANG:-de}"
