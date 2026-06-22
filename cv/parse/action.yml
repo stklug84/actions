@@ -20,7 +20,7 @@
 # pinned versions by the wrapper.
 #
 # Usage (LaTeX):
-#   - uses: actions/checkout@v6
+#   - uses: actions/checkout@v7
 #   - uses: stklug84/actions/cv/parse@v2
 #     with:
 #       mode: latex
@@ -29,7 +29,7 @@
 #       out-dir: build/tex
 #
 # Usage (web):
-#   - uses: actions/checkout@v6
+#   - uses: actions/checkout@v7
 #   - uses: stklug84/actions/cv/parse@v2
 #     with:
 #       mode: web

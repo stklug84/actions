@@ -15,7 +15,7 @@
 # greps the repository's .tex files in the workspace.
 #
 # Usage:
-#   - uses: actions/checkout@v6
+#   - uses: actions/checkout@v7
 #   - id: scan
 #     uses: stklug84/actions/texlive/discover-variants@v1
 #     with:
