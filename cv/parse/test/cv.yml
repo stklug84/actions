@@ -28,6 +28,11 @@ contact:
     - Deutschland
   phone: +49 000 0000000
   email: jane.doe@example.com
+  linkedin:
+    url: https://www.linkedin.com/in/jane-doe
+    label: in/jane-doe
+  github:
+    url: https://github.com/octocat
   location_signature: Anytown
   photo_path: images/photo.jpg
   signature_path: images/signature.pdf

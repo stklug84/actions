@@ -14,6 +14,19 @@
 \newcommand{\cvaddressthree}{\VAR{info.address_three | latex}}
 \newcommand{\cvphone}{\VAR{info.phone | latex}}
 \newcommand{\cvemail}{\VAR{info.email | latex}}
+\newcommand{\cvemailurl}{\VAR{info.email_url | latex}}
+\BLOCK{if info.linkedin_url}
+\newcommand{\cvlinkedinurl}{\VAR{info.linkedin_url | latex}}
+\newcommand{\cvlinkedinlabel}{\VAR{info.linkedin_label | latex}}
+\BLOCK{endif}
+\BLOCK{if info.github_url}
+\newcommand{\cvgithuburl}{\VAR{info.github_url | latex}}
+\newcommand{\cvgithublabel}{\VAR{info.github_label | latex}}
+\BLOCK{endif}
+\BLOCK{if info.website_url}
+\newcommand{\cvwebsiteurl}{\VAR{info.website_url | latex}}
+\newcommand{\cvwebsitelabel}{\VAR{info.website_label | latex}}
+\BLOCK{endif}
 
 \newcommand{\cvlocation}{\VAR{info.location | latex}}
 \newcommand{\cvphotopath}{\VAR{info.photo_path}}

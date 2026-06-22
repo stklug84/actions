@@ -91,8 +91,7 @@ def _targets_of(entry: dict[str, Any], where: str) -> list[str]:
     invalid = [t for t in targets if t not in VALID_TARGETS]
     if invalid:
         raise CheckError(
-            f"{where}: invalid target(s) {invalid}; "
-            f"allowed: {sorted(VALID_TARGETS)}"
+            f"{where}: invalid target(s) {invalid}; allowed: {sorted(VALID_TARGETS)}"
         )
     return targets
 
@@ -143,6 +142,22 @@ def validate(data: dict[str, Any]) -> None:
         raise CheckError("contact.address: must be a list of 1-3 strings")
     if not all(isinstance(line, str) and line.strip() for line in address):
         raise CheckError("contact.address: every entry must be a non-empty string")
+
+    # Optional contact profile links: linkedin / github / website.
+    # Each, IF PRESENT, must be a mapping {url: <non-empty str>,
+    # label: <optional str>}. Absence of all three remains valid.
+    for link_key in ("linkedin", "github", "website"):
+        if link_key not in contact:
+            continue
+        link = contact[link_key]
+        if not isinstance(link, dict):
+            raise CheckError(f"contact.{link_key}: must be a mapping")
+        url = link.get("url")
+        if not isinstance(url, str) or not url.strip():
+            raise CheckError(f"contact.{link_key}.url: must be a non-empty string")
+        label = link.get("label")
+        if label is not None and not isinstance(label, str):
+            raise CheckError(f"contact.{link_key}.label: must be a string")
 
     # experience[]
     exp_ids: list[str] = []
@@ -510,11 +525,24 @@ def _latex_certifications(data: dict[str, Any], lang: str) -> list[str]:
     ]
 
 
+def _derive_link_label(url: str) -> str:
+    """Derive a display label from ``url``.
+
+    Strips the ``https://`` / ``http://`` scheme and any trailing slash.
+    """
+    label = url.strip()
+    for scheme in ("https://", "http://"):
+        if label.lower().startswith(scheme):
+            label = label[len(scheme) :]
+            break
+    return label.rstrip("/")
+
+
 def _personal_info(data: dict[str, Any], lang: str) -> dict[str, Any]:
     meta = data["meta"]
     contact = data["contact"]
     address = [*list(contact["address"]), "", "", ""]
-    return {
+    info: dict[str, Any] = {
         "author": meta["author"],
         "pdf_author": meta["pdf_author"],
         "title": "Lebenslauf",
@@ -531,6 +559,27 @@ def _personal_info(data: dict[str, Any], lang: str) -> dict[str, Any]:
         "photo_path": contact["photo_path"],
         "signature": contact["signature_path"],
     }
+
+    # Always emit a mailto link derived from the existing email.
+    info["email_url"] = f"mailto:{contact['email']}"
+
+    # Optional profile links. When present, forward <key>_url and
+    # <key>_label (label derived from the URL when not supplied).
+    # When absent, both are empty strings.
+    for link_key in ("linkedin", "github", "website"):
+        link = contact.get(link_key)
+        if isinstance(link, dict):
+            url = link["url"]
+            label = link.get("label")
+            if not (isinstance(label, str) and label.strip()):
+                label = _derive_link_label(url)
+            info[f"{link_key}_url"] = url
+            info[f"{link_key}_label"] = label
+        else:
+            info[f"{link_key}_url"] = ""
+            info[f"{link_key}_label"] = ""
+
+    return info
 
 
 def emit_latex(data: dict[str, Any], style: str, lang: str, out_dir: Path) -> list[str]:
