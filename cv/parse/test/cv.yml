@@ -4,8 +4,8 @@
 # url, and mixed targets (latex-only, web-only, both, absent->default).
 meta:
   display_name: Jane Doe
-  author: Dr.\@ rer.\@ nat.\@ Jane Doe
-  pdf_author: Dr. rer. nat. Jane Doe
+  author: Dr.\@ Jane Doe
+  pdf_author: Dr. Jane Doe
   lang_default: de
   title:
     de: Lebenslauf
