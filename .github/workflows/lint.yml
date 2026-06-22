@@ -15,7 +15,7 @@
 # ---
 name: Lint
 
-on:  # yamllint disable-line rule:truthy
+on:
   pull_request:
     branches:
       - main
