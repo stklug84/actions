@@ -86,10 +86,23 @@ def load_manifest(path: Path) -> Manifest:
     return data
 
 
-def expand_matrix(manifest: Manifest) -> Iterator[Context]:
+def expand_matrix(
+    manifest: Manifest, data_dir: Path | None = None
+) -> Iterator[Context]:
     styles = manifest["styles"]
     langs = manifest["langs"]
     for yaml_name, entries in manifest["cvs"].items():
+        # Skip sources that are absent from the checkout. CV data may be
+        # gitignored/local-only (e.g. PII-bearing sources built locally via
+        # a variants.local.yml overlay), so the committed matrix can name a
+        # source the remote does not carry. Tolerate it instead of failing.
+        if data_dir is not None and not (data_dir / f"{yaml_name}.yml").is_file():
+            print(
+                f"warning: skipping {yaml_name}: source "
+                f"{data_dir / f'{yaml_name}.yml'} not found",
+                file=sys.stderr,
+            )
+            continue
         for entry in entries:
             style = entry["style"]
             lang = entry["lang"]
@@ -186,6 +199,10 @@ def run_check(manifest: Manifest, data_dir: Path, parse_py: str | None) -> int:
     rc = 0
     for yaml_name in manifest["cvs"]:
         source = data_dir / f"{yaml_name}.yml"
+        # Tolerate gitignored/local-only sources the remote does not carry.
+        if not source.is_file():
+            print(f"Skipping {source}: not found in checkout")
+            continue
         print(f"Checking {source} against the cv/parse schema")
         result = subprocess.run(  # nosec B603 - args are program-controlled
             [sys.executable, parse_py, "--source", str(source), "--check"]
@@ -227,7 +244,7 @@ def main(argv: list[str]) -> int:
 
     main_file = f"{args.main_name}.tex"
     count = 0
-    for ctx in expand_matrix(manifest):
+    for ctx in expand_matrix(manifest, data_dir):
         leaf = cvs_root / f"{ctx['yaml_name']}-{ctx['lang']}" / ctx["style"]
         leaf.mkdir(parents=True, exist_ok=True)
         (leaf / ".engine").write_text(ctx["engine"] + "\n", encoding="utf-8")
