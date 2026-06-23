@@ -155,15 +155,19 @@ def validate(data: dict[str, Any]) -> None:
             raise CheckError(f"meta.{field}: missing")
         _check_bilingual(meta[field], f"meta.{field}")
 
-    # Rule 6: contact.address is a list of 1-3 strings.
+    # Rule 6: contact.address is OPTIONAL; when present it must be a list of
+    # 1-3 non-empty strings. (birthdate, birthplace, location_signature,
+    # photo_path and signature_path are likewise optional and emitted empty
+    # when absent — see _personal_info.)
     contact = data["contact"]
     if not isinstance(contact, dict):
         raise CheckError("contact: must be a mapping")
-    address = contact.get("address")
-    if not isinstance(address, list) or not (1 <= len(address) <= 3):
-        raise CheckError("contact.address: must be a list of 1-3 strings")
-    if not all(isinstance(line, str) and line.strip() for line in address):
-        raise CheckError("contact.address: every entry must be a non-empty string")
+    if "address" in contact:
+        address = contact["address"]
+        if not isinstance(address, list) or not (1 <= len(address) <= 3):
+            raise CheckError("contact.address: must be a list of 1-3 strings")
+        if not all(isinstance(line, str) and line.strip() for line in address):
+            raise CheckError("contact.address: every entry must be a non-empty string")
 
     # Optional contact profile links: linkedin / github / website.
     # Each, IF PRESENT, must be a mapping {url: <non-empty str>,
@@ -563,23 +567,26 @@ def _derive_link_label(url: str) -> str:
 def _personal_info(data: dict[str, Any], lang: str) -> dict[str, Any]:
     meta = data["meta"]
     contact = data["contact"]
-    address = [*list(contact["address"]), "", "", ""]
+    # Optional contact fields are emitted empty when absent (the templates
+    # define the macros unconditionally; consuming styles guard \includegraphics
+    # on the empty photo/signature paths). address is optional too.
+    address = [*list(contact.get("address") or []), "", "", ""]
     info: dict[str, Any] = {
         "author": meta["author"],
         "pdf_author": meta["pdf_author"],
         "title": "Lebenslauf",
         "subject": meta.get("subject", ""),
         "display_name": meta["display_name"],
-        "birthdate": contact["birthdate"],
-        "birthplace": contact["birthplace"],
+        "birthdate": contact.get("birthdate", ""),
+        "birthplace": contact.get("birthplace", ""),
         "address_one": address[0],
         "address_two": address[1],
         "address_three": address[2],
         "phone": contact["phone"],
         "email": contact["email"],
-        "location": contact["location_signature"],
-        "photo_path": contact["photo_path"],
-        "signature": contact["signature_path"],
+        "location": contact.get("location_signature", ""),
+        "photo_path": contact.get("photo_path", ""),
+        "signature": contact.get("signature_path", ""),
     }
 
     # Always emit a mailto link derived from the existing email.

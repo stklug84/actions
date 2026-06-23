@@ -69,10 +69,34 @@ run_golden fs-en      --mode latex --style fs      --lang en
 run_golden ia-de      --mode latex --style ia      --lang de
 run_golden web         --mode web
 
+# Minimal-contact variant: all optional contact fields (birthdate,
+# birthplace, address, location_signature, photo_path, signature_path)
+# omitted. Locks the empty-macro emission so the optionality cannot
+# regress. Uses the dedicated cv-minimal-contact.yml fixture.
+echo "test: golden minimal-de"
+if ! "$PYTHON" "$PARSE_PY" --source "$TEST_DIR/cv-minimal-contact.yml" \
+    --out-dir "$SCRATCH/minimal-de" --mode latex --style plain --lang de \
+    >/dev/null; then
+  echo "  FAIL: parse.py errored for minimal-de"
+  FAILURES=$((FAILURES + 1))
+elif ! diff -ru "$GOLDEN_DIR/minimal-de" "$SCRATCH/minimal-de"; then
+  echo "  FAIL: output differs from golden for minimal-de"
+  FAILURES=$((FAILURES + 1))
+fi
+
 # --check on the valid fixture must pass.
 echo "test: --check valid fixture"
 if ! "$PYTHON" "$PARSE_PY" --source "$FIXTURE" --check >/dev/null; then
   echo "  FAIL: --check rejected the valid fixture"
+  FAILURES=$((FAILURES + 1))
+fi
+
+# --check on the minimal-contact fixture (optional contact fields omitted)
+# must also pass.
+echo "test: --check minimal-contact fixture"
+if ! "$PYTHON" "$PARSE_PY" --source "$TEST_DIR/cv-minimal-contact.yml" \
+    --check >/dev/null; then
+  echo "  FAIL: --check rejected the minimal-contact fixture"
   FAILURES=$((FAILURES + 1))
 fi
 
