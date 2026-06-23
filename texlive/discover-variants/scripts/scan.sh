@@ -33,9 +33,14 @@ DEFAULT_ENGINE="${2:-latexmk}"
 err() { echo "::error::$*" >&2; }
 log() { echo "$*" >&2; }
 
+# A missing or empty root is not an error: the caller may legitimately
+# have nothing to build (e.g. every CV source is local-only/gitignored
+# PII, so cv/generate produced no tree). Emit an empty matrix and let the
+# downstream matrix build degrade to a no-op.
 if [ ! -d "$ROOT" ] || [ -z "$(ls -A "$ROOT" 2>/dev/null || true)" ]; then
-  err "No variants found. Expected directories under $ROOT/."
-  exit 1
+  log "No variants found under $ROOT/; emitting an empty matrix."
+  printf '%s\n' '{"include":[]}'
+  exit 0
 fi
 
 ROOT="${ROOT%/}"
@@ -54,8 +59,9 @@ done < <(
 )
 
 if [ "${#variant_dirs[@]}" -eq 0 ]; then
-  err "No variants found. Expected a directory under $ROOT/ with a main .tex (file with \\documentclass)."
-  exit 1
+  log "No variant directories (with a main .tex) under $ROOT/; emitting an empty matrix."
+  printf '%s\n' '{"include":[]}'
+  exit 0
 fi
 
 entries=()
