@@ -1,0 +1,90 @@
+---
+# Minimal-contact fixture for cv/parse tests. Proves the optional contact
+# fields can be OMITTED entirely: birthdate, birthplace, address,
+# location_signature, photo_path and signature_path are all absent here.
+# The emitter must render their macros empty (and consuming styles guard
+# \includegraphics on the empty photo/signature paths). Everything else is
+# the minimal shape required by validate() and the LaTeX emitter.
+meta:
+  display_name: Jane Doe
+  author: Jane Doe
+  pdf_author: Jane Doe
+  lang_default: de
+  title:
+    de: Lebenslauf
+    en: Curriculum Vitae
+  location:
+    de: Deutschland
+    en: Germany
+  summary:
+    de: Zusammenfassung.
+    en: Summary.
+
+contact:
+  # No birthdate / birthplace / address / location_signature / photo_path /
+  # signature_path — all optional, emitted empty.
+  phone: +49 000 0000000
+  email: jane.doe@example.com
+
+experience:
+  - id: acme
+    targets: [latex, web]
+    period:
+      de: seit 09/2015
+      en: Since 09/2015
+    year: 2015
+    role:
+      de: IT-Systemarchitekt
+      en: Lead Cloud Architect
+    org: Example Corp
+    location:
+      de: Anytown
+      en: Anytown
+    kind: work
+    monogram: EC
+    bg: /assets/img/cv/bg/topology.svg
+    summary:
+      de: Zusammenfassung.
+      en: Summary.
+    tags: [Azure]
+    bullets:
+      - de: Bullet.
+        en: Bullet.
+
+education:
+  - id: phd
+    targets: [latex]
+    period: 05/2010 --- 07/2013
+    degree:
+      de: Promotion
+      en: PhD
+    institution:
+      de: Example University
+      en: Example University
+    details: []
+
+conferences: []
+
+skills:
+  - targets: [latex, web]
+    group:
+      de: Cloud
+      en: Cloud
+    items: [Azure]
+
+languages:
+  - targets: [latex]
+    name:
+      de: Deutsch
+      en: German
+    level_label:
+      de: Muttersprache
+      en: Native
+    level: 5
+
+certifications: []
+
+interests:
+  - targets: [latex]
+    de: Wandern
+    en: Hiking
