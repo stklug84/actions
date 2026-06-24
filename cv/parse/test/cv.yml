@@ -146,11 +146,27 @@ skills:
       de: Cloud
       en: Cloud
     items: [Azure, Landing Zones, Networking, Identity]
+    size: .8
   - targets: [latex, web]
     group:
       de: IaC & Delivery
       en: IaC & Delivery
     items: [Bicep, Terraform, GitHub Actions]
+    size: .6
+
+# concepts[] is OPTIONAL and consumed only by the `tagged` style's
+# \cvskillbubbles. Other styles ignore it. The second entry is web-only to
+# exercise target filtering in the latex emitter.
+concepts:
+  - targets: [latex, web]
+    text: MLOps
+    size: 8
+  - targets: [web]
+    text: Web Only Concept
+    size: 5
+  - targets: [latex, web]
+    text: Knowledge Graphs
+    size: 6
 
 languages:
   - targets: [latex]
