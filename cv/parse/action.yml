@@ -50,7 +50,12 @@ inputs:
     required: false
     default: "latex"
   style:
-    description: LaTeX style — `plain` or `sidebar` (latex mode only).
+    description: >-
+      LaTeX style (latex mode only) — `plain`, `sidebar`, `pw`, `dh`,
+      `vs`, `fs` or `tagged`. `tagged` (cv-tagged-ia.sty) additionally
+      consumes skills[].size, the optional concepts[] section and
+      experience[].tags for its \cvskillbar / \cvskillbubbles /
+      \cvtechstack macros.
     required: false
     default: "plain"
   lang:

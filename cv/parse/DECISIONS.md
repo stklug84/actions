@@ -42,14 +42,37 @@ and view-model construction.
 - `trim_blocks=True`, `lstrip_blocks=True`, `keep_trailing_newline=True`
   for predictable whitespace in the generated `.tex`/`.yml`.
 - Templates loaded from `scripts/templates/` via `FileSystemLoader`.
-- Example-CV styles (`pw`, `dh`, `vs`, `fs`, `ia`) are selectable via
+- Example-CV styles (`pw`, `dh`, `vs`, `fs`, `tagged`) are selectable via
   `--style`. They share the `sidebar` public macro API, so `pw`/`dh`/`vs`
   alias the `sidebar` templates through `STYLE_TEMPLATE_DIRS` (no
-  duplication); the single-column `fs`/`ia` keep their own
-  `templates/{fs,ia}/` directories so they can diverge later. The
+  duplication); the single-column `fs`/`tagged` keep their own
+  `templates/{fs,tagged}/` directories so they can diverge later. The
   `_template_dir(style)` helper resolves the directory; the per-style
-  goldens (`test/golden/{pw-de,dh-de,vs-en,fs-en,ia-de}`) lock both the
+  goldens (`test/golden/{pw-de,dh-de,vs-en,fs-en,tagged-de}`) lock both the
   alias identity and the dedicated templates.
+
+### The `tagged` style and its extra fields
+
+`tagged` drives `cv-tagged-ia.sty`, the only style whose public API extends
+beyond `\cvskillgroup` to `\cvskillbar{label}{frac}`,
+`\cvskillbubbles{l/w, ...}` and `\cvtechstack{a / b / c}`. To feed those, the
+`tagged` emitter consumes three fields the other styles ignore:
+
+- `skills[].size` — a 0..1 fraction rendered as the group's `\cvskillbar`
+  (the group name doubles as the bar label; the item list still renders
+  via `\cvskillgroup` directly below it).
+- `concepts[]` — an **optional** top-level section of `{text, size}` pairs,
+  rendered as a trailing `\cvskillbubbles` row in `cv-skills.tex`. `size`
+  is the bubble weight, left unbounded so sources tune it for the macro's
+  radius formula (`0.06 + 0.045*weight`).
+- `experience[].tags` — emitted as a `\cvtechstack` line directly below the
+  corresponding `\cventry`.
+
+All three are validated only when present (`concepts` is never required),
+so sources targeting other styles need not carry them. A follow-up
+(tracked in curriculum-vitae) proposes per-style schema checks so each
+emitter validates exactly the shape it consumes rather than one shared,
+lowest-common-denominator `validate()`.
 
 ### Web emitter note
 

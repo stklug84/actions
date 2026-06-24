@@ -60,15 +60,18 @@ LATEX_SECTION_FILES = {
 }
 
 # Selectable ``--style`` values. ``plain`` and ``sidebar`` are the original
-# layouts; ``pw``/``dh``/``vs``/``fs``/``ia`` reproduce the example CVs in the
-# curriculum-vitae repo (styles/cv-{sidebar-pw,sidebar-dh,sidebar-vs,
-# banking-fs,tagged-ia}.sty).
-LATEX_STYLES = ["plain", "sidebar", "pw", "dh", "vs", "fs", "ia"]
+# layouts; ``pw``/``dh``/``vs``/``fs``/``tagged`` reproduce the example CVs in
+# the curriculum-vitae repo (styles/cv-{sidebar-pw,sidebar-dh,sidebar-vs,
+# banking-fs,tagged-ia}.sty). ``tagged`` drives cv-tagged-ia.sty's extended
+# macro API (\cvskillbar / \cvskillbubbles / \cvtechstack), so it consumes
+# extra YAML fields (skills[].size, concepts[], experience[].tags) that the
+# other styles ignore.
+LATEX_STYLES = ["plain", "sidebar", "pw", "dh", "vs", "fs", "tagged"]
 
 # Style -> template subdirectory. Several example-CV styles share the
 # ``sidebar`` macro API (\cventry/\cvsection/\cvskillgroup/...), so they reuse
 # its templates instead of duplicating them. Styles with a distinct macro
-# surface (single-column ``fs``/``ia``) get their own template directory.
+# surface (single-column ``fs``/``tagged``) get their own template directory.
 # A style absent from this map renders from its own ``<style>/`` directory.
 STYLE_TEMPLATE_DIRS = {
     "pw": "sidebar",
@@ -134,6 +137,15 @@ def _check_int(value: Any, where: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise CheckError(f"{where}: must be an integer")
     return value
+
+
+def _check_unit(value: Any, where: str) -> float:
+    """Validate a unit-interval number (0..1), used for skill-bar fractions."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise CheckError(f"{where}: must be a number")
+    if not 0 <= value <= 1:
+        raise CheckError(f"{where}: must be a number in 0..1")
+    return float(value)
 
 
 def validate(data: dict[str, Any]) -> None:
@@ -255,6 +267,31 @@ def validate(data: dict[str, Any]) -> None:
         items = entry.get("items")
         if not isinstance(items, list) or not items:
             raise CheckError(f"{where}.items: must be a non-empty list")
+        # ``size`` is optional (consumed only by the ``tagged`` style's
+        # \cvskillbar). When present it must be a number in 0..1.
+        if "size" in entry:
+            _check_unit(entry["size"], f"{where}.size")
+
+    # concepts[] — OPTIONAL section (consumed only by the ``tagged`` style's
+    # \cvskillbubbles). Absent => valid. When present it must be a list of
+    # {text: non-empty str, size: number}. ``size`` is the bubble weight and
+    # is left unbounded here: the tagged style scales it via its radius
+    # formula, and sources tune it freely (see data/cv-databricks.yml).
+    if "concepts" in data:
+        concepts = data["concepts"]
+        if not isinstance(concepts, list):
+            raise CheckError("concepts: must be a list")
+        for index, entry in enumerate(concepts):
+            where = f"concepts[{index}]"
+            if not isinstance(entry, dict):
+                raise CheckError(f"{where}: must be a mapping")
+            _targets_of(entry, where)
+            text = entry.get("text")
+            if not isinstance(text, str) or not text.strip():
+                raise CheckError(f"{where}.text: must be a non-empty string")
+            size = entry.get("size")
+            if not isinstance(size, (int, float)) or isinstance(size, bool):
+                raise CheckError(f"{where}.size: must be a number")
 
     # languages[]
     for index, entry in enumerate(data["languages"]):
@@ -455,6 +492,7 @@ def _latex_experience(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
                 "org": entry["org"],
                 "location": _pick(entry["location"], lang),
                 "summary": _pick(entry["summary"], lang),
+                "tags": list(entry.get("tags", []) or []),
                 "bullets": [_pick(b, lang) for b in entry.get("bullets", []) or []],
                 "subentries": [
                     {
@@ -517,6 +555,28 @@ def _latex_skills(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
             {
                 "group": _pick(entry["group"], lang),
                 "items": list(entry["items"]),
+                "size": entry.get("size"),
+            }
+        )
+    return rows
+
+
+def _latex_concepts(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
+    """View-model for the optional ``concepts`` section.
+
+    Each concept is a ``{text, size}`` pair feeding the ``tagged`` style's
+    ``\\cvskillbubbles`` macro. ``concepts`` is optional: sources without it
+    yield an empty list (and the template emits nothing). Entries are
+    filtered by ``targets`` like every other section.
+    """
+    rows = []
+    for entry in data.get("concepts", []) or []:
+        if not _has_target(entry, "latex"):
+            continue
+        rows.append(
+            {
+                "text": entry.get("text", ""),
+                "size": entry.get("size"),
             }
         )
     return rows
@@ -648,6 +708,7 @@ def emit_latex(data: dict[str, Any], style: str, lang: str, out_dir: Path) -> li
             f"{tdir}/skills.tex.j2",
             {
                 "rows": _latex_skills(data, lang),
+                "concepts": _latex_concepts(data, lang),
             },
         ),
         "languages": (

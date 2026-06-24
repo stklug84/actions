@@ -59,14 +59,16 @@ run_golden plain-en   --mode latex --style plain   --lang en
 run_golden sidebar-de --mode latex --style sidebar --lang de
 run_golden sidebar-en --mode latex --style sidebar --lang en
 # Example-CV styles. pw/dh/vs reuse the sidebar templates (see
-# STYLE_TEMPLATE_DIRS in parse.py); fs/ia render from their own template
+# STYLE_TEMPLATE_DIRS in parse.py); fs/tagged render from their own template
 # directories. The goldens lock both the alias behavior and the dedicated
-# templates so a future divergence is caught.
+# templates so a future divergence is caught. `tagged` additionally exercises
+# skills[].size (\cvskillbar), the optional concepts[] section
+# (\cvskillbubbles) and experience[].tags (\cvtechstack).
 run_golden pw-de      --mode latex --style pw      --lang de
 run_golden dh-de      --mode latex --style dh      --lang de
 run_golden vs-en      --mode latex --style vs      --lang en
 run_golden fs-en      --mode latex --style fs      --lang en
-run_golden ia-de      --mode latex --style ia      --lang de
+run_golden tagged-de  --mode latex --style tagged  --lang de
 run_golden web         --mode web
 
 # Minimal-contact variant: all optional contact fields (birthdate,
