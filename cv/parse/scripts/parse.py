@@ -148,6 +148,15 @@ def _check_unit(value: Any, where: str) -> float:
     return float(value)
 
 
+def _check_coord(value: Any, where: str, bound: float) -> float:
+    """Validate a geographic coordinate in [-bound, bound] (90 lat / 180 lon)."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise CheckError(f"{where}: must be a number")
+    if not -bound <= value <= bound:
+        raise CheckError(f"{where}: must be a number in -{bound:g}..{bound:g}")
+    return float(value)
+
+
 def validate(data: dict[str, Any]) -> None:
     """Validate ``data`` against the shared schema contract.
 
@@ -256,6 +265,16 @@ def validate(data: dict[str, Any]) -> None:
         _check_int(entry.get("year"), f"{where}.year")
         if not isinstance(entry.get("name"), str) or not entry["name"].strip():
             raise CheckError(f"{where}.name: must be a non-empty string")
+        # lat/lon are optional (consumed only by the tagged style's
+        # \cvheatmap). When present, both must be supplied together as
+        # numbers within geographic bounds.
+        has_lat = "lat" in entry
+        has_lon = "lon" in entry
+        if has_lat != has_lon:
+            raise CheckError(f"{where}: lat and lon must be supplied together")
+        if has_lat:
+            _check_coord(entry["lat"], f"{where}.lat", 90.0)
+            _check_coord(entry["lon"], f"{where}.lon", 180.0)
 
     # skills[]
     for index, entry in enumerate(data["skills"]):
@@ -546,6 +565,34 @@ def _latex_conferences(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
     ]
 
 
+def _latex_conf_heatmap(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
+    """Aggregate geolocated conferences into weighted map points.
+
+    Entries carrying lat/lon are bucketed by their (rounded) coordinate; the
+    bucket's count becomes the dot weight ("heat") consumed by the tagged
+    style's \\cvheatmap. Entries without coordinates contribute to the
+    textual list (\\_latex_conferences) but not the map. Returned sorted by
+    descending weight then longitude for a stable emit order.
+    """
+    buckets: dict[tuple[float, float], dict[str, Any]] = {}
+    for entry in data["conferences"]:
+        if not _has_target(entry, "latex"):
+            continue
+        if "lat" not in entry or "lon" not in entry:
+            continue
+        lat = round(float(entry["lat"]), 2)
+        lon = round(float(entry["lon"]), 2)
+        bucket = buckets.setdefault(
+            (lat, lon),
+            {"lat": lat, "lon": lon, "label": entry.get("location", ""), "weight": 0},
+        )
+        bucket["weight"] += 1
+    return sorted(
+        buckets.values(),
+        key=lambda point: (-point["weight"], point["lon"]),
+    )
+
+
 def _latex_skills(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
     rows = []
     for entry in data["skills"]:
@@ -640,12 +687,25 @@ def _personal_info(data: dict[str, Any], lang: str) -> dict[str, Any]:
     meta_location = _pick(meta["location"], lang)
     if not (contact.get("address") or []):
         address[1] = meta_location
+    # Split display_name into first/last for the tagged style's two-line
+    # \cvname (all-but-last token -> firstname, last token -> lastname).
+    # Single-token names degrade gracefully: firstname holds the whole name
+    # and lastname is empty.
+    _name_parts = meta["display_name"].split()
+    if len(_name_parts) > 1:
+        firstname = " ".join(_name_parts[:-1])
+        lastname = _name_parts[-1]
+    else:
+        firstname = meta["display_name"]
+        lastname = ""
     info: dict[str, Any] = {
         "author": meta["author"],
         "pdf_author": meta["pdf_author"],
         "title": "Lebenslauf",
         "subject": meta.get("subject", ""),
         "display_name": meta["display_name"],
+        "firstname": firstname,
+        "lastname": lastname,
         "roleline": _pick(meta["title"], lang),
         "profile": _pick(meta["summary"], lang),
         "birthdate": contact.get("birthdate", ""),
@@ -713,6 +773,7 @@ def emit_latex(data: dict[str, Any], style: str, lang: str, out_dir: Path) -> li
             f"{tdir}/conferences.tex.j2",
             {
                 "groups": _latex_conferences(data, lang),
+                "heatmap": _latex_conf_heatmap(data, lang),
             },
         ),
         "skills": (

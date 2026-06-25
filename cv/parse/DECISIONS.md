@@ -67,9 +67,24 @@ beyond `\cvskillgroup` to `\cvskillbar{label}{frac}`,
   radius formula (`0.06 + 0.045*weight`).
 - `experience[].tags` — emitted as a `\cvtechstack` line directly below the
   corresponding `\cventry`.
+- `conferences[].lat` / `conferences[].lon` — **optional** geographic
+  coordinates (decimal degrees, lat in -90..90, lon in -180..180). When
+  present they must be supplied **together**. Geolocated conferences are
+  aggregated by rounded coordinate into weighted points (visit count =
+  "heat") and emitted as a leading `\cvheatmap{lon/lat/weight, ...}` line in
+  `cv-conferences.tex`, ahead of the year-grouped `\cventry` list.
+  Conferences without coordinates still render in the textual list but do not
+  appear on the map.
 
-All three are validated only when present (`concepts` is never required),
-so sources targeting other styles need not carry them. A follow-up
+These optional tagged-only fields are validated only when present (`concepts`
+is never required; lat/lon are jointly optional per entry), so sources
+targeting other styles need not carry them.
+
+Independently of style, `\_personal_info` splits `meta.display_name` into
+`\cvfirstname` (all-but-last whitespace token) and `\cvlastname` (last
+token) so the tagged style's two-line `\cvname{first}{last}` can stack the
+name; single-token names put the whole string in `\cvfirstname` with an
+empty `\cvlastname`. A follow-up
 (tracked in curriculum-vitae) proposes per-style schema checks so each
 emitter validates exactly the shape it consumes rather than one shared,
 lowest-common-denominator `validate()`.
