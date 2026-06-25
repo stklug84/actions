@@ -631,12 +631,23 @@ def _personal_info(data: dict[str, Any], lang: str) -> dict[str, Any]:
     # define the macros unconditionally; consuming styles guard \includegraphics
     # on the empty photo/signature paths). address is optional too.
     address = [*list(contact.get("address") or []), "", "", ""]
+    # meta.location (bilingual) is the geographic location shown in the
+    # header. When contact.address is omitted, it backs the map-marker
+    # contact chip (\cvaddresstwo) so the location is never blank; a present
+    # contact.address always wins. \cvlocation stays bound to
+    # contact.location_signature, which the plain style's signature block
+    # consumes (\cvlocation, \today).
+    meta_location = _pick(meta["location"], lang)
+    if not (contact.get("address") or []):
+        address[1] = meta_location
     info: dict[str, Any] = {
         "author": meta["author"],
         "pdf_author": meta["pdf_author"],
         "title": "Lebenslauf",
         "subject": meta.get("subject", ""),
         "display_name": meta["display_name"],
+        "roleline": _pick(meta["title"], lang),
+        "profile": _pick(meta["summary"], lang),
         "birthdate": contact.get("birthdate", ""),
         "birthplace": contact.get("birthplace", ""),
         "address_one": address[0],

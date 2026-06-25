@@ -4,7 +4,14 @@
 % placed directly below the entry, when tags are present.
 \BLOCK{for row in rows}
 \cventry{\VAR{row.role | latex}}{\VAR{row.period | latex}}{\VAR{row.org | latex}, \VAR{row.location | latex}}{%
-\VAR{row.summary | latex}}
+\VAR{row.summary | latex}
+\BLOCK{if row.bullets}
+\begin{itemize}
+\BLOCK{for bullet in row.bullets}
+  \item \VAR{bullet | latex}
+\BLOCK{endfor}
+\end{itemize}
+\BLOCK{endif}}
 \BLOCK{if row.tags}
 \cvtechstack{\VAR{row.tags | join(' / ') | latex}}
 \BLOCK{endif}
