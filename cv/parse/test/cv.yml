@@ -139,6 +139,15 @@ conferences:
     name: Scala Days 2019
     location: Lausanne
     date: 05/2019
+    lat: 46.52
+    lon: 6.63
+  - targets: [latex]
+    year: 2018
+    name: Scala Days 2018
+    location: Lausanne
+    date: 06/2018
+    lat: 46.52
+    lon: 6.63
 
 skills:
   - targets: [latex, web]
