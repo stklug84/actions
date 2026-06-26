@@ -54,13 +54,24 @@ and view-model construction.
 ### The `tagged` style and its extra fields
 
 `tagged` drives `cv-tagged-ia.sty`, the only style whose public API extends
-beyond `\cvskillgroup` to `\cvskillbar{label}{frac}`,
-`\cvskillbubbles{l/w, ...}` and `\cvtechstack{a / b / c}`. To feed those, the
-`tagged` emitter consumes three fields the other styles ignore:
+beyond `\cvskillgroup` to per-item skill bars
+(`\cvskillgroupheading{group}` + `\cvskillitembar{name}{frac}`),
+`\cvskillbubbles{l/w, ...}`, `\cvtechstack{a / b / c}` and
+`\cvinterest{icon}{text}`. To feed those, the `tagged` emitter consumes
+fields the other styles render only partially:
 
-- `skills[].size` — a 0..1 fraction rendered as the group's `\cvskillbar`
-  (the group name doubles as the bar label; the item list still renders
-  via `\cvskillgroup` directly below it).
+- `skills[].items[]` — each item is a `{name, size}` mapping. `size` is a
+  0..1 fraction rendered as that item's inline proficiency bar via
+  `\cvskillitembar` (preceded once per group by `\cvskillgroupheading`).
+  The non-tagged styles (`plain`, `sidebar`, `fs`) and the web emitter use
+  only `name`, ignoring `size`. A group-level `skills[].size` is no longer
+  used (it was the old per-group bar fraction); it is tolerated but ignored
+  when present.
+- `interests[].icon` — an **optional** FontAwesome control-sequence name
+  (without the leading backslash, e.g. `faBicycle`) used by the `tagged`
+  style as the interest's list bullet via `\cvinterest`. Absent ⇒ the style
+  falls back to its default square bullet; the other styles ignore `icon`
+  and render the label text alone.
 - `concepts[]` — an **optional** top-level section of `{text, size}` pairs,
   rendered as a trailing `\cvskillbubbles` row in `cv-skills.tex`. `size`
   is the bubble weight, left unbounded so sources tune it for the macro's

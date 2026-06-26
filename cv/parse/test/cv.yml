@@ -154,14 +154,19 @@ skills:
     group:
       de: Cloud
       en: Cloud
-    items: [Azure, Landing Zones, Networking, Identity]
-    size: .8
+    items:
+      - {name: Azure, size: .9}
+      - {name: Landing Zones, size: .7}
+      - {name: Networking, size: .6}
+      - {name: Identity, size: .5}
   - targets: [latex, web]
     group:
       de: IaC & Delivery
       en: IaC & Delivery
-    items: [Bicep, Terraform, GitHub Actions]
-    size: .6
+    items:
+      - {name: Bicep, size: .8}
+      - {name: Terraform, size: .7}
+      - {name: GitHub Actions, size: .6}
 
 # concepts[] is OPTIONAL and consumed only by the `tagged` style's
 # \cvskillbubbles. Other styles ignore it. The second entry is web-only to
@@ -209,6 +214,7 @@ interests:
   - targets: [latex]
     de: Radfahren
     en: Cycling
+    icon: faBicycle
   - targets: [latex]
     de: Bergwandern
     en: Hiking

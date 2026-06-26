@@ -286,8 +286,21 @@ def validate(data: dict[str, Any]) -> None:
         items = entry.get("items")
         if not isinstance(items, list) or not items:
             raise CheckError(f"{where}.items: must be a non-empty list")
-        # ``size`` is optional (consumed only by the ``tagged`` style's
-        # \cvskillbar). When present it must be a number in 0..1.
+        # Each item is a mapping {name: non-empty str, size: number in 0..1}.
+        # ``size`` is the per-item proficiency bar fraction consumed by the
+        # ``tagged`` style's \cvskillitembar; other styles render only the
+        # item names. (Earlier sources used a flat list of strings with a
+        # group-level ``size``; that shape is no longer accepted.)
+        for i_index, item in enumerate(items):
+            i_where = f"{where}.items[{i_index}]"
+            if not isinstance(item, dict):
+                raise CheckError(f"{i_where}: must be a mapping with 'name' and 'size'")
+            name = item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                raise CheckError(f"{i_where}.name: must be a non-empty string")
+            _check_unit(item.get("size"), f"{i_where}.size")
+        # A group-level ``size`` is no longer used; tolerate it when present
+        # for back-compat but validate it as a unit fraction if given.
         if "size" in entry:
             _check_unit(entry["size"], f"{where}.size")
 
@@ -339,6 +352,14 @@ def validate(data: dict[str, Any]) -> None:
             raise CheckError(f"{where}: must be a mapping")
         _targets_of(entry, where)
         _check_bilingual(entry, where)
+        # ``icon`` is OPTIONAL (consumed only by the ``tagged`` style's
+        # \cvinterest, which maps it to a FontAwesome glyph used as the
+        # list bullet). When present it must be a non-empty string (e.g.
+        # "faBicycle"); absence falls back to the style's default bullet.
+        if "icon" in entry:
+            icon = entry["icon"]
+            if not isinstance(icon, str) or not icon.strip():
+                raise CheckError(f"{where}.icon: must be a non-empty string")
 
 
 # --------------------------------------------------------------------------
@@ -601,7 +622,10 @@ def _latex_skills(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
         rows.append(
             {
                 "group": _pick(entry["group"], lang),
-                "items": list(entry["items"]),
+                "items": [
+                    {"name": item["name"], "size": item["size"]}
+                    for item in entry["items"]
+                ],
                 "size": entry.get("size"),
             }
         )
@@ -644,9 +668,19 @@ def _latex_languages(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
     return rows
 
 
-def _latex_interests(data: dict[str, Any], lang: str) -> list[str]:
+def _latex_interests(data: dict[str, Any], lang: str) -> list[dict[str, str]]:
+    """View-model for the interests section.
+
+    Each interest is a ``{text, icon}`` pair: ``text`` is the localized
+    label, ``icon`` is the optional FontAwesome control-sequence name
+    (without the leading backslash, e.g. ``faBicycle``) or ``""`` when
+    absent. Only the ``tagged`` style renders the icon (as the list
+    bullet via ``\\cvinterest``); other styles use ``text`` alone.
+    """
     return [
-        _pick(entry, lang) for entry in data["interests"] if _has_target(entry, "latex")
+        {"text": _pick(entry, lang), "icon": entry.get("icon", "") or ""}
+        for entry in data["interests"]
+        if _has_target(entry, "latex")
     ]
 
 
@@ -847,8 +881,14 @@ def emit_web(data: dict[str, Any], out_dir: Path) -> list[str]:
             role["logo"] = logo
         roles.append(role)
 
+    # The web schema lists skill items as plain name strings; flatten the
+    # per-item {name, size} mappings down to their names (size is a
+    # LaTeX-only proficiency-bar weight and has no web representation).
     skills = [
-        {"group": entry["group"]["en"], "items": list(entry["items"])}
+        {
+            "group": entry["group"]["en"],
+            "items": [item["name"] for item in entry["items"]],
+        }
         for entry in data["skills"]
         if _has_target(entry, "web")
     ]
