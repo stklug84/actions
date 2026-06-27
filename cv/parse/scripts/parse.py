@@ -428,6 +428,31 @@ def latex_escape(value: Any) -> str:
     return "".join(pieces)
 
 
+# Author abbreviation-period spacing. A bare "Dr. rer. nat. Steffen Klug"
+# would have LaTeX treat each abbreviation period as a SENTENCE end and add
+# the wider inter-sentence space. ``\@`` after such a period forces the normal
+# inter-word space. We insert it conservatively: only after a period that
+#   * is preceded by a letter (an abbreviation token, not a digit/symbol), and
+#   * is followed by whitespace and at least one more token (i.e. not the final
+#     name word, which carries no trailing period), and
+#   * is not ALREADY followed by ``\@`` (idempotent — inputs that still carry
+#     hand-written ``\@`` are left untouched for backward compatibility).
+# This keeps the YAML free of LaTeX while reproducing the previous output.
+_AUTHOR_ABBREV_RE = re.compile(r"(?<=[^\W\d_])\.(?!\\@)(\s+)(?=\S)")
+
+
+def author_spacing(value: Any) -> str:
+    r"""Insert ``\@`` after abbreviation periods in an author string.
+
+    Turns ``Dr. rer. nat. Steffen Klug`` into
+    ``Dr.\@ rer.\@ nat.\@ Steffen Klug`` so LaTeX uses inter-word (not
+    inter-sentence) spacing after the abbreviations. Idempotent: a value
+    that already contains ``\@`` after a period is returned unchanged.
+    """
+    text = "" if value is None else str(value)
+    return _AUTHOR_ABBREV_RE.sub(r".\\@\1", text)
+
+
 def web_normalize(text: str) -> str:
     """Normalize LaTeX-style typography to Unicode for the web view.
 
@@ -755,7 +780,12 @@ def _personal_info(data: dict[str, Any], lang: str) -> dict[str, Any]:
         firstname = meta["display_name"]
         lastname = ""
     info: dict[str, Any] = {
-        "author": meta["author"],
+        # \cvauthor is emitted verbatim (running header / \author). Inject
+        # \@ after abbreviation periods so clean YAML ("Dr. rer. nat. ...")
+        # spaces correctly without hand-written LaTeX. pdf_author backs the
+        # PDF metadata string and must stay literal (no LaTeX), so it is NOT
+        # transformed.
+        "author": author_spacing(meta["author"]),
         "pdf_author": meta["pdf_author"],
         # PDF metadata title (\cvtitle -> pdftitle). Optional meta.pdf_title
         # overrides the historical default; it may be a scalar or a {de,en}
