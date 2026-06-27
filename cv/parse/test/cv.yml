@@ -202,13 +202,17 @@ languages:
 
 certifications:
   - targets: [latex, web]
-    text:
-      de: "Microsoft Certified: Azure Solutions Architect Expert (AZ-305)"
-      en: "Microsoft Certified: Azure Solutions Architect Expert (AZ-305)"
+    code: "AZ-305"
+    issuer: Microsoft
+    name:
+      de: "Microsoft Certified: Azure Solutions Architect Expert"
+      en: "Microsoft Certified: Azure Solutions Architect Expert"
   - targets: [web]
-    text:
-      de: "Microsoft Certified: DevOps Engineer Expert (AZ-400)"
-      en: "Microsoft Certified: DevOps Engineer Expert (AZ-400)"
+    code: "AZ-400"
+    issuer: Microsoft
+    name:
+      de: "Microsoft Certified: DevOps Engineer Expert"
+      en: "Microsoft Certified: DevOps Engineer Expert"
 
 interests:
   - targets: [latex]

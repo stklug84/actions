@@ -338,12 +338,22 @@ def validate(data: dict[str, Any]) -> None:
             raise CheckError(f"{where}.level: must be an integer in 1..5")
 
     # certifications[]
+    # Schema: {code, name{de,en}, issuer?}. `code` is the short credential
+    # identifier (e.g. "AZ-305") the tagged style renders as a chip; `name`
+    # is the bilingual title WITHOUT the code; `issuer` is optional and not
+    # yet rendered (reserved for future grouping).
     for index, entry in enumerate(data["certifications"]):
         where = f"certifications[{index}]"
         if not isinstance(entry, dict):
             raise CheckError(f"{where}: must be a mapping")
         _targets_of(entry, where)
-        _check_bilingual(entry.get("text"), f"{where}.text")
+        code = entry.get("code")
+        if not isinstance(code, str) or not code.strip():
+            raise CheckError(f"{where}.code: must be a non-empty string")
+        _check_bilingual(entry.get("name"), f"{where}.name")
+        issuer = entry.get("issuer")
+        if issuer is not None and not (isinstance(issuer, str) and issuer.strip()):
+            raise CheckError(f"{where}.issuer: must be a non-empty string")
 
     # interests[]
     for index, entry in enumerate(data["interests"]):
@@ -684,12 +694,24 @@ def _latex_interests(data: dict[str, Any], lang: str) -> list[dict[str, str]]:
     ]
 
 
-def _latex_certifications(data: dict[str, Any], lang: str) -> list[str]:
-    return [
-        _pick(entry["text"], lang)
-        for entry in data["certifications"]
-        if _has_target(entry, "latex")
-    ]
+def _latex_certifications(data: dict[str, Any], lang: str) -> list[dict[str, str]]:
+    """View-model for the certifications section.
+
+    Each cert is ``{code, name, display}``: ``code`` is the credential
+    identifier (e.g. ``AZ-305``), ``name`` the localized title without the
+    code, and ``display`` the legacy ``"<name> (<code>)"`` string. The
+    tagged style consumes ``code``/``name`` separately (code chip + muted
+    title via ``\\cvcert``); plain/sidebar/fs render ``display`` so their
+    output is unchanged.
+    """
+    rows = []
+    for entry in data["certifications"]:
+        if not _has_target(entry, "latex"):
+            continue
+        code = entry["code"]
+        name = _pick(entry["name"], lang)
+        rows.append({"code": code, "name": name, "display": f"{name} ({code})"})
+    return rows
 
 
 def _derive_link_label(url: str) -> str:
@@ -735,7 +757,11 @@ def _personal_info(data: dict[str, Any], lang: str) -> dict[str, Any]:
     info: dict[str, Any] = {
         "author": meta["author"],
         "pdf_author": meta["pdf_author"],
-        "title": "Lebenslauf",
+        # PDF metadata title (\cvtitle -> pdftitle). Optional meta.pdf_title
+        # overrides the historical default; it may be a scalar or a {de,en}
+        # mapping (localized via _pick). Absent -> "Lebenslauf" (unchanged
+        # behaviour for CVs that don't set it).
+        "title": _pick(meta.get("pdf_title") or "Lebenslauf", lang),
         "subject": meta.get("subject", ""),
         "display_name": meta["display_name"],
         "firstname": firstname,
@@ -894,7 +920,7 @@ def emit_web(data: dict[str, Any], out_dir: Path) -> list[str]:
     ]
 
     certifications = [
-        entry["text"]["en"]
+        "{name} ({code})".format(name=entry["name"]["en"], code=entry["code"])
         for entry in data["certifications"]
         if _has_target(entry, "web")
     ]
