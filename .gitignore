@@ -11,3 +11,7 @@
 # ignore VSCode files
 .vscode/
 *.code-workspace
+
+# ignore Python bytecode caches
+__pycache__/
+*.pyc
