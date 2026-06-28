@@ -87,18 +87,53 @@ fields the other styles render only partially:
   Conferences without coordinates still render in the textual list but do not
   appear on the map.
 
-These optional tagged-only fields are validated only when present (`concepts`
-is never required; lat/lon are jointly optional per entry), so sources
-targeting other styles need not carry them.
-
 Independently of style, `\_personal_info` splits `meta.display_name` into
 `\cvfirstname` (all-but-last whitespace token) and `\cvlastname` (last
 token) so the tagged style's two-line `\cvname{first}{last}` can stack the
 name; single-token names put the whole string in `\cvfirstname` with an
-empty `\cvlastname`. A follow-up
-(tracked in curriculum-vitae) proposes per-style schema checks so each
-emitter validates exactly the shape it consumes rather than one shared,
-lowest-common-denominator `validate()`.
+empty `\cvlastname`.
+
+### Style-dependent schema profiles
+
+**Decision: validate against a per-style schema profile** instead of one
+shared, lowest-common-denominator `validate()`. `--style` (default `plain`)
+selects the profile via `STYLE_PROFILES` / `_schema_profile()`; web mode
+always validates against `tagged` because the web emitter consumes — and is
+only ever built from — the tagged shape.
+
+The two profiles diverge exactly where the emitters do:
+
+| Field | `plain` profile (plain/sidebar/pw/dh/vs/fs) | `tagged` profile |
+| ----- | ------------------------------------------- | ---------------- |
+| `skills[].items[]` | plain strings | `{name, size}` mappings |
+| `certifications[]` | bilingual `{text: {de, en}}` | structured `{code, name, issuer?}` |
+| `concepts[]` | **rejected** (tagged-only) | optional `{text, size}` list |
+| `interests[].icon` | **rejected** (tagged-only) | optional FontAwesome name |
+| `conferences[].lat`/`lon` | **rejected** (tagged-only) | optional, jointly required |
+
+The profiles are **strict**: the plain profile actively rejects the
+tagged-only fields (rather than ignoring them) so a source authored for the
+wrong style fails fast at `--check` time with a pinpointed message
+(`concepts: not allowed for the 'plain' style (tagged-only field)`). This
+replaces the earlier behavior where the tagged-only fields were merely
+"validated only when present", which let a plain source silently carry
+shapes its templates could never render.
+
+The plain emitter normalizes each plain-string skill item to an internal
+`{name, size: None}` view-model so the plain/sidebar/fs templates
+(`map(attribute='name')`) need no change.
+
+### `meta.pdf_title` (shared core)
+
+`meta.pdf_title` is **optional and accepted under BOTH profiles** —
+validated in `_validate_core()` (`_check_pdf_title`), not in either profile
+branch. It may be a non-empty scalar (one PDF title for every language) or a
+`{de, en}` mapping. `_personal_info` reads it style-agnostically and
+defaults to `"Lebenslauf"` when absent, so it sets only the PDF metadata
+`\cvtitle` and never the on-page role line. The golden fixtures exercise
+this: `test/cv-plain.yml` carries `pdf_title: {de: Lebenslauf, en:
+Curriculum Vitae}`, so the English non-tagged goldens emit
+`\cvtitle{Curriculum Vitae}` while the German ones stay `Lebenslauf`.
 
 ### Web emitter note
 

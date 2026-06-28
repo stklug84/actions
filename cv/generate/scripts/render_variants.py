@@ -194,18 +194,45 @@ def emit_bodies(
 
 
 def run_check(manifest: Manifest, data_dir: Path, parse_py: str | None) -> int:
+    """Validate each source against the schema of every style it is built with.
+
+    cv/parse validation is **style-dependent**: the ``plain`` and ``tagged``
+    styles require different cert/skill shapes. We therefore validate each
+    source once per distinct ``parse_style`` it appears with in the expanded
+    matrix (passing ``--style`` so the right schema profile is selected),
+    rather than a single style-agnostic pass. Pairs are deduplicated so a
+    source built in several languages with one style is checked once for that
+    style.
+    """
     if not parse_py:
         sys.exit("error: --check requires the cv/parse emitter (--parse-py)")
     rc = 0
-    for yaml_name in manifest["cvs"]:
-        source = data_dir / f"{yaml_name}.yml"
+    seen: set[tuple[str, str]] = set()
+    for ctx in expand_matrix(manifest, data_dir):
+        pair = (ctx["yaml_name"], ctx["parse_style"])
+        if pair in seen:
+            continue
+        seen.add(pair)
+        source = data_dir / f"{ctx['yaml_name']}.yml"
         # Tolerate gitignored/local-only sources the remote does not carry.
+        # (expand_matrix already skips absent sources, but guard anyway.)
         if not source.is_file():
             print(f"Skipping {source}: not found in checkout")
             continue
-        print(f"Checking {source} against the cv/parse schema")
+        print(
+            f"Checking {source} against the cv/parse schema "
+            f"(style={ctx['parse_style']})"
+        )
         result = subprocess.run(  # nosec B603 - args are program-controlled
-            [sys.executable, parse_py, "--source", str(source), "--check"]
+            [
+                sys.executable,
+                parse_py,
+                "--source",
+                str(source),
+                "--style",
+                ctx["parse_style"],
+                "--check",
+            ]
         )
         rc = rc or result.returncode
     return rc

@@ -9,9 +9,15 @@ Two output modes:
 * ``web`` — a single ``cv.yml`` in skcloud's exact schema (English,
   filtered to entries whose ``targets`` contains ``web``).
 
-A ``--check`` mode validates the schema against the shared contract and
-writes nothing, exiting nonzero with a clear message on the first
-violation.
+A ``--check`` mode validates the schema and writes nothing, exiting
+nonzero with a clear message on the first violation. Validation is
+**style-dependent**: ``--style`` selects one of two schema profiles —
+``plain`` (plain/sidebar/pw/dh/vs/fs: bilingual ``certifications[].text``
+and plain-string ``skills[].items``; tagged-only fields rejected) or
+``tagged`` (structured ``certifications[]`` + ``{name, size}`` skill items
+and the optional ``concepts[]`` / ``interests[].icon`` /
+``conferences[].lat``/``lon`` fields). ``meta.pdf_title`` is accepted in
+both profiles. Web mode always validates against the ``tagged`` profile.
 
 The emitters render Jinja2 templates from ``templates/`` with
 ``autoescape=False`` and an explicit ``latex`` escape filter (see
@@ -79,10 +85,33 @@ STYLE_TEMPLATE_DIRS = {
     "vs": "sidebar",
 }
 
+# Style -> schema profile. The two profiles validate (and emit) different
+# shapes for the fields that diverge between the layouts:
+#
+#   * ``tagged`` (cv-tagged-ia.sty) consumes the rich shape — structured
+#     certifications ({code, name, issuer?}), per-item skill proficiency
+#     ({name, size}), and the optional tagged-only fields concepts[],
+#     interests[].icon and conferences[].lat/lon.
+#   * ``plain`` (and the sidebar-family styles that share its cert/skill
+#     emitter surface: sidebar/pw/dh/vs/fs) consumes the lean shape —
+#     bilingual certifications[].text and skills[].items as plain strings —
+#     and REJECTS the tagged-only fields.
+#
+# ``meta.pdf_title`` is validated in the shared core for BOTH profiles.
+# A style absent from this map uses the ``plain`` profile.
+STYLE_PROFILES = {
+    "tagged": "tagged",
+}
+
 
 def _template_dir(style: str) -> str:
     """Resolve the template subdirectory for a ``--style`` value."""
     return STYLE_TEMPLATE_DIRS.get(style, style)
+
+
+def _schema_profile(style: str) -> str:
+    """Resolve the schema profile (``plain`` | ``tagged``) for a ``--style``."""
+    return STYLE_PROFILES.get(style, "plain")
 
 
 class CheckError(Exception):
@@ -133,6 +162,21 @@ def _check_bilingual(value: Any, where: str) -> None:
             raise CheckError(f"{where}: '{lang}' must be a non-empty string")
 
 
+def _check_pdf_title(value: Any, where: str) -> None:
+    """Validate the optional ``meta.pdf_title``.
+
+    Accepted in BOTH schema profiles. It may be either a non-empty scalar
+    string (a single PDF metadata title shared by every language) or a
+    bilingual ``{de, en}`` mapping (localized per language). Absent is valid
+    (``cv/parse`` defaults to ``"Lebenslauf"``).
+    """
+    if isinstance(value, dict):
+        _check_bilingual(value, where)
+        return
+    if not isinstance(value, str) or not value.strip():
+        raise CheckError(f"{where}: must be a non-empty string or a {{de, en}} mapping")
+
+
 def _check_int(value: Any, where: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise CheckError(f"{where}: must be an integer")
@@ -157,8 +201,16 @@ def _check_coord(value: Any, where: str, bound: float) -> float:
     return float(value)
 
 
-def validate(data: dict[str, Any]) -> None:
-    """Validate ``data`` against the shared schema contract.
+def _validate_core(data: dict[str, Any]) -> None:
+    """Validate the style-agnostic core shared by every schema profile.
+
+    Covers the fields that are identical across the ``plain`` and ``tagged``
+    profiles: top-level keys, ``meta`` (incl. the optional ``meta.pdf_title``),
+    ``contact``, ``experience``, ``education``, id-uniqueness, ``languages``,
+    the bilingual ``interests`` labels, and the conference base fields
+    (``year``/``name``). The cert/skill SHAPE and the tagged-only fields
+    (``concepts``, ``interests[].icon``, ``conferences[].lat/lon``) are
+    validated by the per-profile helpers instead.
 
     Raises :class:`CheckError` on the first violation found.
     """
@@ -175,6 +227,12 @@ def validate(data: dict[str, Any]) -> None:
         if field not in meta:
             raise CheckError(f"meta.{field}: missing")
         _check_bilingual(meta[field], f"meta.{field}")
+
+    # meta.pdf_title is OPTIONAL and accepted in BOTH profiles: a non-empty
+    # scalar string or a bilingual {de, en} mapping. Absent => cv/parse
+    # defaults the PDF metadata title to "Lebenslauf".
+    if "pdf_title" in meta:
+        _check_pdf_title(meta["pdf_title"], "meta.pdf_title")
 
     # Rule 6: contact.address is OPTIONAL; when present it must be a list of
     # 1-3 non-empty strings. (birthdate, birthplace, location_signature,
@@ -256,7 +314,9 @@ def validate(data: dict[str, Any]) -> None:
         if dupes:
             raise CheckError(f"{label}: duplicate id(s): {sorted(dupes)}")
 
-    # conferences[]
+    # conferences[] — base fields only (year/name). lat/lon are profile
+    # specific: the tagged profile allows them (jointly), the plain profile
+    # rejects them.
     for index, entry in enumerate(data["conferences"]):
         where = f"conferences[{index}]"
         if not isinstance(entry, dict):
@@ -265,18 +325,9 @@ def validate(data: dict[str, Any]) -> None:
         _check_int(entry.get("year"), f"{where}.year")
         if not isinstance(entry.get("name"), str) or not entry["name"].strip():
             raise CheckError(f"{where}.name: must be a non-empty string")
-        # lat/lon are optional (consumed only by the tagged style's
-        # \cvheatmap). When present, both must be supplied together as
-        # numbers within geographic bounds.
-        has_lat = "lat" in entry
-        has_lon = "lon" in entry
-        if has_lat != has_lon:
-            raise CheckError(f"{where}: lat and lon must be supplied together")
-        if has_lat:
-            _check_coord(entry["lat"], f"{where}.lat", 90.0)
-            _check_coord(entry["lon"], f"{where}.lon", 180.0)
 
-    # skills[]
+    # skills[] — group + non-empty items list. The per-item SHAPE (plain
+    # strings vs {name, size} maps) is profile specific.
     for index, entry in enumerate(data["skills"]):
         where = f"skills[{index}]"
         if not isinstance(entry, dict):
@@ -286,12 +337,107 @@ def validate(data: dict[str, Any]) -> None:
         items = entry.get("items")
         if not isinstance(items, list) or not items:
             raise CheckError(f"{where}.items: must be a non-empty list")
-        # Each item is a mapping {name: non-empty str, size: number in 0..1}.
-        # ``size`` is the per-item proficiency bar fraction consumed by the
-        # ``tagged`` style's \cvskillitembar; other styles render only the
-        # item names. (Earlier sources used a flat list of strings with a
-        # group-level ``size``; that shape is no longer accepted.)
-        for i_index, item in enumerate(items):
+
+    # languages[]
+    for index, entry in enumerate(data["languages"]):
+        where = f"languages[{index}]"
+        if not isinstance(entry, dict):
+            raise CheckError(f"{where}: must be a mapping")
+        _targets_of(entry, where)
+        _check_bilingual(entry.get("name"), f"{where}.name")
+        _check_bilingual(entry.get("level_label"), f"{where}.level_label")
+        level = _check_int(entry.get("level"), f"{where}.level")
+        if not 1 <= level <= 5:  # Rule 5: level in 1..5.
+            raise CheckError(f"{where}.level: must be an integer in 1..5")
+
+    # certifications[] are mappings; the SHAPE (plain {text} vs structured
+    # {code, name, issuer?}) is validated by the per-profile helpers.
+    for index, entry in enumerate(data["certifications"]):
+        where = f"certifications[{index}]"
+        if not isinstance(entry, dict):
+            raise CheckError(f"{where}: must be a mapping")
+        _targets_of(entry, where)
+
+    # interests[] — the bilingual {de, en} label is core; the optional
+    # ``icon`` is a tagged-only field handled by the profile helpers.
+    for index, entry in enumerate(data["interests"]):
+        where = f"interests[{index}]"
+        if not isinstance(entry, dict):
+            raise CheckError(f"{where}: must be a mapping")
+        _targets_of(entry, where)
+        _check_bilingual(entry, where)
+
+
+def _reject_tagged_only(data: dict[str, Any], style: str) -> None:
+    """Reject the tagged-only fields when validating a non-tagged style.
+
+    The ``plain`` profile (plain/sidebar/pw/dh/vs/fs) does not consume
+    ``concepts[]``, ``interests[].icon`` or ``conferences[].lat``/``lon``;
+    a source carrying them under such a style is almost certainly authored
+    for the wrong style, so we fail loudly rather than silently ignore them.
+    """
+    if "concepts" in data:
+        raise CheckError(
+            f"concepts: not allowed for the '{style}' style (tagged-only field)"
+        )
+    for index, entry in enumerate(data["interests"]):
+        if isinstance(entry, dict) and "icon" in entry:
+            raise CheckError(
+                f"interests[{index}].icon: not allowed for the '{style}' style "
+                "(tagged-only field)"
+            )
+    for index, entry in enumerate(data["conferences"]):
+        if isinstance(entry, dict) and ("lat" in entry or "lon" in entry):
+            raise CheckError(
+                f"conferences[{index}]: lat/lon not allowed for the '{style}' "
+                "style (tagged-only field)"
+            )
+
+
+def _validate_plain(data: dict[str, Any], style: str) -> None:
+    """Validate the lean ``plain`` profile shape (plain/sidebar/pw/dh/vs/fs).
+
+    ``skills[].items`` are plain non-empty strings and ``certifications[]``
+    carry a bilingual ``text``. The tagged-only fields are rejected.
+    """
+    _reject_tagged_only(data, style)
+
+    # skills[].items are plain non-empty strings.
+    for index, entry in enumerate(data["skills"]):
+        where = f"skills[{index}]"
+        for i_index, item in enumerate(entry["items"]):
+            i_where = f"{where}.items[{i_index}]"
+            if not isinstance(item, str) or not item.strip():
+                raise CheckError(
+                    f"{i_where}: must be a non-empty string "
+                    f"(plain style; use a {{name, size}} mapping only for 'tagged')"
+                )
+
+    # certifications[] carry a bilingual {de, en} text.
+    for index, entry in enumerate(data["certifications"]):
+        where = f"certifications[{index}]"
+        if "code" in entry or "name" in entry:
+            raise CheckError(
+                f"{where}: 'code'/'name' are tagged-only; the plain style "
+                "expects a bilingual 'text'"
+            )
+        _check_bilingual(entry.get("text"), f"{where}.text")
+
+
+def _validate_tagged(data: dict[str, Any]) -> None:
+    """Validate the rich ``tagged`` profile shape (cv-tagged-ia.sty).
+
+    ``skills[].items`` are ``{name, size}`` mappings, ``certifications[]``
+    are structured ``{code, name{de,en}, issuer?}``, and the tagged-only
+    fields ``concepts[]``, ``interests[].icon`` and ``conferences[].lat``/
+    ``lon`` are accepted (validated only when present).
+    """
+    # skills[].items are {name: non-empty str, size: number in 0..1}.
+    # ``size`` is the per-item proficiency-bar fraction consumed by the
+    # tagged style's \cvskillitembar.
+    for index, entry in enumerate(data["skills"]):
+        where = f"skills[{index}]"
+        for i_index, item in enumerate(entry["items"]):
             i_where = f"{where}.items[{i_index}]"
             if not isinstance(item, dict):
                 raise CheckError(f"{i_where}: must be a mapping with 'name' and 'size'")
@@ -304,11 +450,10 @@ def validate(data: dict[str, Any]) -> None:
         if "size" in entry:
             _check_unit(entry["size"], f"{where}.size")
 
-    # concepts[] — OPTIONAL section (consumed only by the ``tagged`` style's
-    # \cvskillbubbles). Absent => valid. When present it must be a list of
-    # {text: non-empty str, size: number}. ``size`` is the bubble weight and
-    # is left unbounded here: the tagged style scales it via its radius
-    # formula, and sources tune it freely (see data/cv-databricks.yml).
+    # concepts[] — OPTIONAL (consumed only by \cvskillbubbles). When present
+    # it is a list of {text: non-empty str, size: number}. ``size`` is the
+    # bubble weight, left unbounded (the style scales it via its radius
+    # formula; sources tune it freely — see data/cv-databricks.yml).
     if "concepts" in data:
         concepts = data["concepts"]
         if not isinstance(concepts, list):
@@ -325,28 +470,23 @@ def validate(data: dict[str, Any]) -> None:
             if not isinstance(size, (int, float)) or isinstance(size, bool):
                 raise CheckError(f"{where}.size: must be a number")
 
-    # languages[]
-    for index, entry in enumerate(data["languages"]):
-        where = f"languages[{index}]"
-        if not isinstance(entry, dict):
-            raise CheckError(f"{where}: must be a mapping")
-        _targets_of(entry, where)
-        _check_bilingual(entry.get("name"), f"{where}.name")
-        _check_bilingual(entry.get("level_label"), f"{where}.level_label")
-        level = _check_int(entry.get("level"), f"{where}.level")
-        if not 1 <= level <= 5:  # Rule 5: level in 1..5.
-            raise CheckError(f"{where}.level: must be an integer in 1..5")
+    # conferences[].lat/lon — OPTIONAL (consumed only by \cvheatmap). When
+    # present, both must be supplied together as numbers within bounds.
+    for index, entry in enumerate(data["conferences"]):
+        where = f"conferences[{index}]"
+        has_lat = "lat" in entry
+        has_lon = "lon" in entry
+        if has_lat != has_lon:
+            raise CheckError(f"{where}: lat and lon must be supplied together")
+        if has_lat:
+            _check_coord(entry["lat"], f"{where}.lat", 90.0)
+            _check_coord(entry["lon"], f"{where}.lon", 180.0)
 
-    # certifications[]
-    # Schema: {code, name{de,en}, issuer?}. `code` is the short credential
-    # identifier (e.g. "AZ-305") the tagged style renders as a chip; `name`
-    # is the bilingual title WITHOUT the code; `issuer` is optional and not
-    # yet rendered (reserved for future grouping).
+    # certifications[] — {code, name{de,en}, issuer?}. `code` is the short
+    # credential identifier (e.g. "AZ-305") rendered as a chip; `name` is the
+    # bilingual title WITHOUT the code; `issuer` is optional (reserved).
     for index, entry in enumerate(data["certifications"]):
         where = f"certifications[{index}]"
-        if not isinstance(entry, dict):
-            raise CheckError(f"{where}: must be a mapping")
-        _targets_of(entry, where)
         code = entry.get("code")
         if not isinstance(code, str) or not code.strip():
             raise CheckError(f"{where}.code: must be a non-empty string")
@@ -355,21 +495,29 @@ def validate(data: dict[str, Any]) -> None:
         if issuer is not None and not (isinstance(issuer, str) and issuer.strip()):
             raise CheckError(f"{where}.issuer: must be a non-empty string")
 
-    # interests[]
+    # interests[].icon — OPTIONAL FontAwesome control-sequence name (without
+    # the leading backslash, e.g. "faBicycle") used by \cvinterest.
     for index, entry in enumerate(data["interests"]):
         where = f"interests[{index}]"
-        if not isinstance(entry, dict):
-            raise CheckError(f"{where}: must be a mapping")
-        _targets_of(entry, where)
-        _check_bilingual(entry, where)
-        # ``icon`` is OPTIONAL (consumed only by the ``tagged`` style's
-        # \cvinterest, which maps it to a FontAwesome glyph used as the
-        # list bullet). When present it must be a non-empty string (e.g.
-        # "faBicycle"); absence falls back to the style's default bullet.
         if "icon" in entry:
             icon = entry["icon"]
             if not isinstance(icon, str) or not icon.strip():
                 raise CheckError(f"{where}.icon: must be a non-empty string")
+
+
+def validate(data: dict[str, Any], style: str = "plain") -> None:
+    """Validate ``data`` against the schema profile selected by ``style``.
+
+    Runs the style-agnostic :func:`_validate_core` first, then the per-style
+    profile (:func:`_validate_plain` for plain/sidebar/pw/dh/vs/fs,
+    :func:`_validate_tagged` for tagged). Raises :class:`CheckError` on the
+    first violation found.
+    """
+    _validate_core(data)
+    if _schema_profile(style) == "tagged":
+        _validate_tagged(data)
+    else:
+        _validate_plain(data, style)
 
 
 # --------------------------------------------------------------------------
@@ -649,18 +797,31 @@ def _latex_conf_heatmap(data: dict[str, Any], lang: str) -> list[dict[str, Any]]
     )
 
 
-def _latex_skills(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
+def _latex_skills(
+    data: dict[str, Any], lang: str, profile: str = "plain"
+) -> list[dict[str, Any]]:
+    """View-model for the skills section, shaped by the schema ``profile``.
+
+    The ``tagged`` profile reads ``{name, size}`` item mappings (``size`` is
+    the per-item proficiency-bar fraction). The ``plain`` profile reads plain
+    string items; each is normalized to ``{name: <string>, size: None}`` so
+    the plain/sidebar/fs templates (which read ``attribute='name'``) need no
+    change.
+    """
     rows = []
     for entry in data["skills"]:
         if not _has_target(entry, "latex"):
             continue
+        if profile == "tagged":
+            items = [
+                {"name": item["name"], "size": item["size"]} for item in entry["items"]
+            ]
+        else:
+            items = [{"name": item, "size": None} for item in entry["items"]]
         rows.append(
             {
                 "group": _pick(entry["group"], lang),
-                "items": [
-                    {"name": item["name"], "size": item["size"]}
-                    for item in entry["items"]
-                ],
+                "items": items,
                 "size": entry.get("size"),
             }
         )
@@ -719,23 +880,29 @@ def _latex_interests(data: dict[str, Any], lang: str) -> list[dict[str, str]]:
     ]
 
 
-def _latex_certifications(data: dict[str, Any], lang: str) -> list[dict[str, str]]:
-    """View-model for the certifications section.
+def _latex_certifications(
+    data: dict[str, Any], lang: str, profile: str = "plain"
+) -> list[dict[str, str]]:
+    """View-model for the certifications section, shaped by the ``profile``.
 
-    Each cert is ``{code, name, display}``: ``code`` is the credential
-    identifier (e.g. ``AZ-305``), ``name`` the localized title without the
-    code, and ``display`` the legacy ``"<name> (<code>)"`` string. The
-    tagged style consumes ``code``/``name`` separately (code chip + muted
-    title via ``\\cvcert``); plain/sidebar/fs render ``display`` so their
-    output is unchanged.
+    The ``tagged`` profile reads structured ``{code, name{de,en}, issuer?}``
+    entries and emits ``{code, name, display}`` where ``display`` is the
+    legacy ``"<name> (<code>)"`` string; the tagged template consumes
+    ``code``/``name`` separately (code chip + muted title via ``\\cvcert``).
+    The ``plain`` profile reads bilingual ``{text{de,en}}`` entries and emits
+    ``display`` (the localized text) which plain/sidebar/fs render verbatim.
     """
     rows = []
     for entry in data["certifications"]:
         if not _has_target(entry, "latex"):
             continue
-        code = entry["code"]
-        name = _pick(entry["name"], lang)
-        rows.append({"code": code, "name": name, "display": f"{name} ({code})"})
+        if profile == "tagged":
+            code = entry["code"]
+            name = _pick(entry["name"], lang)
+            rows.append({"code": code, "name": name, "display": f"{name} ({code})"})
+        else:
+            text = _pick(entry["text"], lang)
+            rows.append({"code": "", "name": text, "display": text})
     return rows
 
 
@@ -839,6 +1006,9 @@ def emit_latex(data: dict[str, Any], style: str, lang: str, out_dir: Path) -> li
     # Several example-CV styles share another style's templates (see
     # STYLE_TEMPLATE_DIRS); resolve the directory once here.
     tdir = _template_dir(style)
+    # The schema profile selects the cert/skill view-model shape consumed
+    # below (tagged: {code,name}/{name,size}; plain: text/string items).
+    profile = _schema_profile(style)
 
     sections: dict[str, tuple[str, dict[str, Any]]] = {
         "personal-info": (
@@ -869,7 +1039,7 @@ def emit_latex(data: dict[str, Any], style: str, lang: str, out_dir: Path) -> li
         "skills": (
             f"{tdir}/skills.tex.j2",
             {
-                "rows": _latex_skills(data, lang),
+                "rows": _latex_skills(data, lang, profile),
                 "concepts": _latex_concepts(data, lang),
             },
         ),
@@ -888,7 +1058,7 @@ def emit_latex(data: dict[str, Any], style: str, lang: str, out_dir: Path) -> li
         "certifications": (
             f"{tdir}/certifications.tex.j2",
             {
-                "items": _latex_certifications(data, lang),
+                "items": _latex_certifications(data, lang, profile),
             },
         ),
     }
@@ -987,13 +1157,19 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         data = load_cv(args.source)
-        validate(data)
+        # Validation is style-dependent: --style selects the schema profile
+        # (plain vs tagged). The web emitter consumes the tagged shape
+        # directly (structured certs + {name, size} skills) and is only ever
+        # built from a tagged source, so web mode validates against the
+        # tagged profile regardless of --style.
+        validate_style = "tagged" if args.mode == "web" else args.style
+        validate(data, validate_style)
     except CheckError as exc:
         print(f"::error::cv/parse: {exc}", file=sys.stderr)
         return 1
 
     if args.check:
-        print(f"cv/parse: {args.source} is valid.")
+        print(f"cv/parse: {args.source} is valid (style={args.style}).")
         return 0
 
     if args.out_dir is None:

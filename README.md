@@ -244,10 +244,16 @@ one `.tex` file per section for a selected `style` (`plain` |
 contains `latex`. In **`web`** mode it writes a single `cv.yml` in
 skcloud's exact schema (English, filtered to entries whose `targets`
 contains `web`). A `check` mode validates the schema and writes nothing,
-exiting nonzero with a clear message on the first violation. Implemented
-in Python 3 (PyYAML + Jinja2, installed by the wrapper at pinned
-versions); a thin bash step drives it. Requires the repository to be
-checked out first (`actions/checkout`).
+exiting nonzero with a clear message on the first violation. Validation is
+**style-dependent**: `style` selects one of two schema profiles — `plain`
+(plain/sidebar/pw/dh/vs/fs: bilingual `certifications[].text` and
+plain-string `skills[].items`; tagged-only fields rejected) or `tagged`
+(structured certifications, `{name, size}` skill items, and the optional
+`concepts[]` / `interests[].icon` / `conferences[].lat`/`lon`).
+`meta.pdf_title` is accepted by both; `web` mode always validates against
+the `tagged` profile. Implemented in Python 3 (PyYAML + Jinja2, installed
+by the wrapper at pinned versions); a thin bash step drives it. Requires
+the repository to be checked out first (`actions/checkout`).
 
 ```yaml
 # LaTeX: per-section .tex files (sidebar style, German).
@@ -273,10 +279,13 @@ checked out first (`actions/checkout`).
 
 ```yaml
 # Validate only — write nothing, fail on the first schema violation.
+# `style` selects the schema profile (default plain); pass the style the
+# source is authored for (e.g. tagged for a tagged-shaped cv.yml).
 - uses: actions/checkout@v6
 - uses: stklug84/actions/cv/parse@v2
   with:
     source: data/cv.yml
+    style: tagged
     check: "true"
     out-dir: build/tex   # required by the schema but unused for check
 ```
@@ -288,7 +297,7 @@ checked out first (`actions/checkout`).
 | `style`   | `plain`        | LaTeX style (latex mode only) — `plain`, `sidebar`, or an example-CV style `pw`/`dh`/`vs`/`fs`/`ia`. |
 | `lang`    | `de`           | Language — `de` or `en` (latex mode; web is always English).      |
 | `out-dir` | —              | Directory the generated files are written into. Required.         |
-| `check`   | `"false"`      | `true` → validate the schema and write nothing (fails on error).  |
+| `check`   | `"false"`      | `true` → validate the schema (under the `style` profile) and write nothing (fails on error). |
 
 Outputs are written as files into `out-dir` (the action sets no step
 outputs):
@@ -312,6 +321,17 @@ They all share the same public macro API as `sidebar`, so `pw`/`dh`/`vs`
 reuse the `sidebar` templates verbatim (see `STYLE_TEMPLATE_DIRS` in
 `scripts/parse.py`); the single-column `fs` and `ia` render from their own
 `templates/{fs,ia}/` directories to allow future divergence.
+
+The `ia` (`tagged`) style consumes a richer schema than the others:
+`{name, size}` skill items (proficiency bars), structured
+`certifications[]` (`code`, `name`, optional `issuer`), and the optional
+`concepts[]`, `interests[].icon` and `conferences[].lat`/`lon` fields. The
+plain-profile styles instead expect plain-string `skills[].items` and
+bilingual `certifications[].text`, and reject the tagged-only fields. The
+emitter normalizes plain-string skill items internally, so authoring a
+source under the wrong profile is caught by `check` rather than producing
+malformed output. See `cv/parse/DECISIONS.md` for the full profile
+contract.
 
 ## Linting
 
