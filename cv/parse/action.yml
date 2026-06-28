@@ -68,7 +68,12 @@ inputs:
   check:
     description: >-
       When `true`, validate the schema and write nothing (exits nonzero
-      with a clear message on the first violation).
+      with a clear message on the first violation). Validation is
+      style-dependent: `style` selects the schema profile — `plain`
+      (bilingual certifications[].text + plain-string skills[].items;
+      tagged-only fields rejected) or `tagged` (structured certifications
+      + {name, size} skill items + optional concepts/icon/lat-lon).
+      `meta.pdf_title` is accepted under both.
     required: false
     default: "false"
 

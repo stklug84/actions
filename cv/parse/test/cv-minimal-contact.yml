@@ -70,8 +70,7 @@ skills:
     group:
       de: Cloud
       en: Cloud
-    items:
-      - {name: Azure, size: .8}
+    items: [Azure]
 
 languages:
   - targets: [latex]
