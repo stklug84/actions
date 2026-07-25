@@ -1,0 +1,76 @@
+---
+# Composite action: check OWL consistency and coherence with ROBOT.
+#
+# Sets up a JDK, downloads a pinned robot.jar from the official
+# ontodev/robot GitHub release, and runs `robot reason` over each of
+# the given ontology files independently. `robot reason` fails on
+# logical inconsistency and on unsatisfiable classes (incoherence), so
+# a passing run certifies both. Prints OK/FAIL per file and fails when
+# any file does not pass.
+#
+# Requires the repository to be checked out first (actions/checkout).
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - uses: stklug84/actions/rdf/reason-owl@v2
+#     with:
+#       files: "ontology/core.owl ontology/ext.owl"
+#       reasoner: hermit   # optional
+name: Reason over OWL with ROBOT
+description: >-
+  Check OWL ontologies for logical consistency and coherence
+  (unsatisfiable classes) with `robot reason` and a pinned robot.jar.
+
+inputs:
+  files:
+    description: >-
+      Space-separated ontology files to reason over. Each file is
+      reasoned independently.
+    required: true
+  reasoner:
+    description: >-
+      Reasoner for `robot reason --reasoner` — hermit, elk, whelk,
+      jfact, or structural.
+    required: false
+    default: "hermit"
+  robot-version:
+    description: ROBOT release to install (pinned robot.jar).
+    required: false
+    default: "1.9.8"
+  java-version:
+    description: JDK version for actions/setup-java.
+    required: false
+    default: "21"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Java
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+
+    # robot.jar is fetched over HTTPS from the official GitHub release.
+    # No integrity check is enforced; rely on TLS for transport
+    # security.
+    - name: Download ROBOT
+      shell: bash
+      env:
+        ROBOT_VERSION: ${{ inputs.robot-version }}
+      run: |
+        set -euo pipefail
+        BASE="https://github.com/ontodev/robot/releases/download"
+        curl -fsSL -o "$RUNNER_TEMP/robot.jar" "$BASE/v${ROBOT_VERSION}/robot.jar"
+        java -jar "$RUNNER_TEMP/robot.jar" --version
+
+    # The reasoned output is discarded (written to a throwaway temp
+    # .owl file); only the reasoner's verdict matters.
+    - name: Reason over ontologies
+      shell: bash
+      env:
+        FILES: ${{ inputs.files }}
+        REASONER: ${{ inputs.reasoner }}
+      run: |
+        set -euo pipefail
+        ROBOT_JAR="$RUNNER_TEMP/robot.jar" "$GITHUB_ACTION_PATH/scripts/reason.sh"

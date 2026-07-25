@@ -1,0 +1,79 @@
+---
+# Composite action: scan Python sources for security issues with Bandit.
+#
+# Installs a pinned `bandit[toml]` release with `pip install --user`
+# (the toml extra reads [tool.bandit] from a pyproject.toml) and runs a
+# recursive scan (`bandit -r`) over the given paths. The default
+# severity/confidence thresholds are "low", i.e. every finding is
+# reported; raise them to "medium"/"high" to reduce noise.
+#
+# Requires the repository to be checked out first (actions/checkout)
+# and a Python with pip on PATH (preinstalled on ubuntu-latest).
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - uses: stklug84/actions/python/security@v2
+#     with:
+#       paths: "scripts"         # optional; default "."
+#       config: pyproject.toml   # optional; passed via -c
+name: Bandit security scan
+description: >-
+  Scan Python sources recursively with a pinned Bandit release,
+  reporting findings at or above the given severity/confidence levels.
+
+inputs:
+  paths:
+    description: Space-separated files/directories to scan.
+    required: false
+    default: "."
+  bandit-version:
+    description: Bandit release to install (pinned, with the toml extra).
+    required: false
+    default: "1.8.0"
+  config:
+    description: >-
+      Optional path to a Bandit configuration file (e.g. a
+      pyproject.toml with a [tool.bandit] table), passed via -c.
+      Empty → flag omitted.
+    required: false
+    default: ""
+  severity:
+    description: >-
+      Minimum severity reported (--severity-level) — low, medium, or
+      high.
+    required: false
+    default: "low"
+  confidence:
+    description: >-
+      Minimum confidence reported (--confidence-level) — low, medium,
+      or high.
+    required: false
+    default: "low"
+
+runs:
+  using: composite
+  steps:
+    - name: Install bandit
+      shell: bash
+      env:
+        BANDIT_VERSION: ${{ inputs.bandit-version }}
+      run: |
+        set -euo pipefail
+        pip install --user "bandit[toml]==${BANDIT_VERSION}"
+        bandit --version
+
+    - name: Run bandit
+      shell: bash
+      env:
+        PATHS: ${{ inputs.paths }}
+        CONFIG: ${{ inputs.config }}
+        SEVERITY: ${{ inputs.severity }}
+        CONFIDENCE: ${{ inputs.confidence }}
+      run: |
+        set -euo pipefail
+        read -ra TARGETS <<< "$PATHS"
+        ARGS=(--severity-level "$SEVERITY" --confidence-level "$CONFIDENCE")
+        if [ -n "$CONFIG" ]; then
+          ARGS+=(-c "$CONFIG")
+        fi
+        bandit -r "${ARGS[@]}" "${TARGETS[@]}"
