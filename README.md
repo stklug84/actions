@@ -333,6 +333,147 @@ source under the wrong profile is caught by `check` rather than producing
 malformed output. See `cv/parse/DECISIONS.md` for the full profile
 contract.
 
+## `python/lint`
+
+Lint Python sources with a pinned [Ruff](https://docs.astral.sh/ruff/) release:
+`ruff check` plus an optional `ruff format --check`. A Ruff configuration file
+(ruff.toml or a pyproject.toml) may be passed explicitly; left empty, Ruff's
+own configuration auto-discovery applies. Requires the repository to be
+checked out first (`actions/checkout`).
+
+```yaml
+- uses: actions/checkout@v7
+- uses: stklug84/actions/python/lint@v2
+  with:
+    paths: "src tests"       # optional; default "."
+    config: pyproject.toml   # optional; empty → auto-discovery
+```
+
+| Input          | Default    | Description                                                    |
+|----------------|------------|----------------------------------------------------------------|
+| `paths`        | `"."`      | Space-separated files/directories to lint.                     |
+| `ruff-version` | `"0.16.0"` | Ruff release to install (pinned).                              |
+| `config`       | `""`       | Ruff config file (`--config`). Empty → auto-discovery.         |
+| `check-format` | `"true"`   | Also run `ruff format --check`.                                |
+
+## `python/typecheck`
+
+Type-check Python sources with a pinned [mypy](https://mypy-lang.org/)
+release, strict by default. When a configuration file governs the strictness
+settings, set `strict: "false"` and pass the file via `config`. Third-party
+imports and type stubs the checked code needs can be installed via
+`extra-deps`. Requires the repository to be checked out first
+(`actions/checkout`).
+
+```yaml
+- uses: actions/checkout@v7
+- uses: stklug84/actions/python/typecheck@v2
+  with:
+    paths: "scripts/parse.py"          # optional; default "."
+    extra-deps: "types-PyYAML Jinja2"  # optional stub/import deps
+```
+
+| Input          | Default    | Description                                                     |
+|----------------|------------|------------------------------------------------------------------|
+| `paths`        | `"."`      | Space-separated files/directories to type-check.                |
+| `mypy-version` | `"1.19.0"` | mypy release to install (pinned).                               |
+| `strict`       | `"true"`   | Pass `--strict`. Set `"false"` when a config file governs it.   |
+| `config`       | `""`       | mypy config file (`--config-file`). Empty → auto-discovery.     |
+| `extra-deps`   | `""`       | Space-separated pip packages (type stubs / imports).            |
+
+## `python/security`
+
+Scan Python sources recursively with a pinned
+[Bandit](https://bandit.readthedocs.io/) release (`bandit -r`, installed with
+the `toml` extra so `[tool.bandit]` tables in a pyproject.toml are read). The
+default thresholds report every finding; raise `severity`/`confidence` to
+`medium`/`high` to reduce noise. Requires the repository to be checked out
+first (`actions/checkout`).
+
+```yaml
+- uses: actions/checkout@v7
+- uses: stklug84/actions/python/security@v2
+  with:
+    paths: "scripts"         # optional; default "."
+    config: pyproject.toml   # optional; passed via -c
+```
+
+| Input            | Default   | Description                                                    |
+|------------------|-----------|----------------------------------------------------------------|
+| `paths`          | `"."`     | Space-separated files/directories to scan.                     |
+| `bandit-version` | `"1.8.0"` | Bandit release to install (pinned, `bandit[toml]`).            |
+| `config`         | `""`      | Bandit config file (`-c`). Empty → flag omitted.               |
+| `severity`       | `"low"`   | Minimum severity reported (`--severity-level`).                |
+| `confidence`     | `"low"`   | Minimum confidence reported (`--confidence-level`).            |
+
+## `rdf/validate-turtle`
+
+Validate Turtle/RDF syntax with `riot --validate` from a pinned
+[Apache Jena](https://jena.apache.org/) release (downloaded from Maven
+Central, where version-pinned artifacts are hosted permanently). Every file
+matching the glob pattern(s) is validated; `OK`/`FAIL` is printed per file
+and the action fails when any file is invalid or no file matches. Requires
+the repository to be checked out first (`actions/checkout`).
+
+```yaml
+- uses: actions/checkout@v7
+- uses: stklug84/actions/rdf/validate-turtle@v2
+  with:
+    glob: "**/*.ttl"   # optional; space-separated patterns
+```
+
+| Input          | Default      | Description                                                       |
+|----------------|--------------|--------------------------------------------------------------------|
+| `glob`         | `"**/*.ttl"` | Space-separated find-style glob pattern(s) selecting the files.   |
+| `jena-version` | `"5.4.0"`    | Apache Jena release to install (pinned).                          |
+| `java-version` | `"21"`       | JDK version for `actions/setup-java`.                             |
+
+## `rdf/validate-sparql`
+
+Validate SPARQL query files by parsing them with
+[rdflib](https://rdflib.readthedocs.io/)'s `prepareQuery`. Every file
+matching the glob pattern(s) is parsed; `OK`/`FAIL` is printed per file and
+the action fails when any file is invalid or no file matches. Covers the
+SPARQL 1.1 *Query* grammar only (SELECT / CONSTRUCT / ASK / DESCRIBE);
+*Update* requests are reported as syntax errors. Requires the repository to
+be checked out first (`actions/checkout`).
+
+```yaml
+- uses: actions/checkout@v7
+- uses: stklug84/actions/rdf/validate-sparql@v2
+  with:
+    glob: "**/*.rq"   # optional; space-separated patterns
+```
+
+| Input            | Default     | Description                                                      |
+|------------------|-------------|-------------------------------------------------------------------|
+| `glob`           | `"**/*.rq"` | Space-separated pathlib-style glob pattern(s) selecting files.   |
+| `python-version` | `"3.12"`    | Python version for `actions/setup-python`.                       |
+| `rdflib-version` | `">=7,<8"`  | PEP 440 specifier appended to `rdflib` for pip.                  |
+
+## `rdf/reason-owl`
+
+Check OWL ontologies for logical consistency and coherence (unsatisfiable
+classes) with [ROBOT](https://robot.obolibrary.org/)'s `reason` command and a
+pinned `robot.jar`. Each file is reasoned independently; `OK`/`FAIL` is
+printed per file and the action fails when any file does not pass. Requires
+the repository to be checked out first (`actions/checkout`).
+
+```yaml
+- uses: actions/checkout@v7
+- uses: stklug84/actions/rdf/reason-owl@v2
+  with:
+    files: "ontology/core.owl ontology/ext.owl"
+    reasoner: hermit   # optional
+```
+
+| Input           | Default    | Description                                                      |
+|-----------------|------------|-------------------------------------------------------------------|
+| `files`         | —          | Space-separated ontology files to reason over. Required.         |
+| `reasoner`      | `"hermit"` | `hermit`, `elk`, `whelk`, `jfact`, or `structural`.              |
+| `robot-version` | `"1.9.8"`  | ROBOT release to install (pinned `robot.jar`).                   |
+| `java-version`  | `"21"`     | JDK version for `actions/setup-java`.                            |
+
 ## Linting
 
 Pull requests against `main` run the `Lint` workflow
