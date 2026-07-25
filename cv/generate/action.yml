@@ -58,8 +58,10 @@ inputs:
     description: >-
       When `true`, validate every manifest YAML against the cv/parse
       schema and write nothing (exits nonzero on the first violation).
-      Validation is style-dependent: each source is checked once per
-      distinct `parse_style` it is built with in the matrix (plain vs
+      Validation is style-dependent and per entry: each source is checked
+      once per manifest style it is built with in the matrix, selecting
+      the entries targeting that style (per-style `targets` tokens or the
+      generic `latex`) under the style's `parse_style` profile (plain vs
       tagged require different cert/skill shapes).
     required: false
     default: "false"

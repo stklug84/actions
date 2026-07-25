@@ -1,0 +1,81 @@
+---
+# Composite action: validate Turtle/RDF syntax with Apache Jena riot.
+#
+# Sets up a JDK, installs a pinned Apache Jena release from Maven
+# Central (version-pinned artifacts are hosted there permanently,
+# unlike the rotating dlcdn.apache.org mirrors, which drop old
+# releases), and runs `riot --validate` over every file matching the
+# given glob pattern(s), printing OK/FAIL per file and failing when
+# any file is invalid or no file matches.
+#
+# Requires the repository to be checked out first (actions/checkout).
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - uses: stklug84/actions/rdf/validate-turtle@v2
+#     with:
+#       glob: "**/*.ttl"   # optional; space-separated patterns
+name: Validate Turtle with Jena riot
+description: >-
+  Validate Turtle/RDF files with `riot --validate` from a pinned
+  Apache Jena release.
+
+inputs:
+  glob:
+    description: >-
+      Space-separated glob pattern(s) selecting the files to validate
+      (find-style; a pattern without `/` matches by file name anywhere
+      in the tree, `**` crosses directories).
+    required: false
+    default: "**/*.ttl"
+  jena-version:
+    description: Apache Jena release to install (pinned).
+    required: false
+    default: "5.4.0"
+  java-version:
+    description: JDK version for actions/setup-java.
+    required: false
+    default: "21"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Java
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+
+    # Jena is fetched over HTTPS from Maven Central. No integrity check
+    # is enforced; rely on TLS for transport security. The version input
+    # is validated against a strict X.Y.Z pattern and the archive is
+    # unpacked into a FIXED directory ($RUNNER_TEMP/apache-jena), so the
+    # path appended to GITHUB_PATH never contains user-controlled data
+    # (CodeQL: actions/envpath-injection).
+    - name: Install Apache Jena
+      shell: bash
+      env:
+        JENA_VERSION: ${{ inputs.jena-version }}
+      run: |
+        set -euo pipefail
+        if ! [[ "$JENA_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::jena-version must match X.Y.Z, got: $JENA_VERSION" >&2
+          exit 1
+        fi
+        BASE="https://repo1.maven.org/maven2/org/apache/jena/apache-jena"
+        URL="$BASE/${JENA_VERSION}/apache-jena-${JENA_VERSION}.tar.gz"
+        curl -fsSL -o "$RUNNER_TEMP/apache-jena.tar.gz" "$URL"
+        mkdir -p "$RUNNER_TEMP/apache-jena"
+        tar -xzf "$RUNNER_TEMP/apache-jena.tar.gz" \
+          -C "$RUNNER_TEMP/apache-jena" --strip-components=1
+        rm -f "$RUNNER_TEMP/apache-jena.tar.gz"
+        echo "$RUNNER_TEMP/apache-jena/bin" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/apache-jena/bin/riot" --version
+
+    - name: Validate Turtle files
+      shell: bash
+      env:
+        GLOB: ${{ inputs.glob }}
+      run: |
+        set -euo pipefail
+        "$GITHUB_ACTION_PATH/scripts/validate.sh"

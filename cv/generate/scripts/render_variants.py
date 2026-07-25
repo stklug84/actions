@@ -152,12 +152,24 @@ def find_body_donor(cvs_root: Path) -> Path | None:
     return None
 
 
+def valid_targets_of(manifest: Manifest) -> str:
+    """Comma-joined manifest style names, passed to cv/parse.
+
+    Registers every registered style name as an accepted ``targets`` token
+    so a merged multi-style source can address entries per presentation
+    style (e.g. ``targets: [cv-tagged-ia, web]``) instead of the generic
+    ``latex`` token.
+    """
+    return ",".join(str(name) for name in manifest["styles"])
+
+
 def emit_bodies(
     ctx: Context,
     leaf: Path,
     data_dir: Path,
     cvs_root: Path,
     parse_py: str | None,
+    valid_targets: str = "",
 ) -> None:
     source = data_dir / f"{ctx['yaml_name']}.yml"
     if parse_py:
@@ -171,6 +183,10 @@ def emit_bodies(
                 "latex",
                 "--style",
                 ctx["parse_style"],
+                "--target-style",
+                ctx["style"],
+                "--valid-targets",
+                valid_targets,
                 "--lang",
                 ctx["lang"],
                 "--out-dir",
@@ -207,9 +223,14 @@ def run_check(manifest: Manifest, data_dir: Path, parse_py: str | None) -> int:
     if not parse_py:
         sys.exit("error: --check requires the cv/parse emitter (--parse-py)")
     rc = 0
+    valid_targets = valid_targets_of(manifest)
     seen: set[tuple[str, str]] = set()
     for ctx in expand_matrix(manifest, data_dir):
-        pair = (ctx["yaml_name"], ctx["parse_style"])
+        # Deduplicate per (source, manifest style): the target-style filter
+        # selects a different entry subset per style, so a merged source
+        # built with several styles is checked once per style (not just
+        # once per parse_style).
+        pair = (ctx["yaml_name"], ctx["style"])
         if pair in seen:
             continue
         seen.add(pair)
@@ -221,7 +242,7 @@ def run_check(manifest: Manifest, data_dir: Path, parse_py: str | None) -> int:
             continue
         print(
             f"Checking {source} against the cv/parse schema "
-            f"(style={ctx['parse_style']})"
+            f"(style={ctx['style']}, profile={ctx['parse_style']})"
         )
         result = subprocess.run(  # nosec B603 - args are program-controlled
             [
@@ -231,6 +252,10 @@ def run_check(manifest: Manifest, data_dir: Path, parse_py: str | None) -> int:
                 str(source),
                 "--style",
                 ctx["parse_style"],
+                "--target-style",
+                ctx["style"],
+                "--valid-targets",
+                valid_targets,
                 "--check",
             ]
         )
@@ -270,13 +295,14 @@ def main(argv: list[str]) -> int:
     )
 
     main_file = f"{args.main_name}.tex"
+    valid_targets = valid_targets_of(manifest)
     count = 0
     for ctx in expand_matrix(manifest, data_dir):
         leaf = cvs_root / f"{ctx['yaml_name']}-{ctx['lang']}" / ctx["style"]
         leaf.mkdir(parents=True, exist_ok=True)
         (leaf / ".engine").write_text(ctx["engine"] + "\n", encoding="utf-8")
         render_main(env, ctx, leaf / main_file)
-        emit_bodies(ctx, leaf, data_dir, cvs_root, parse_py)
+        emit_bodies(ctx, leaf, data_dir, cvs_root, parse_py, valid_targets)
         print(f"Generated {ctx['style']} (lang={ctx['lang']}) into {leaf}/")
         count += 1
 

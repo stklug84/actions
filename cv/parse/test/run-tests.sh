@@ -48,27 +48,27 @@ trap 'rm -rf "$SCRATCH"' EXIT
 FAILURES=0
 
 run_golden() {
-  # run_golden <variant-name> <source-yaml> <parse.py args...>
-  local variant="$1"
-  local source="$2"
-  shift 2
-  echo "test: golden $variant"
-  if ! "$PYTHON" "$PARSE_PY" --source "$source" \
-      --out-dir "$SCRATCH/$variant" "$@" >/dev/null; then
-    echo "  FAIL: parse.py errored for $variant"
-    FAILURES=$((FAILURES + 1))
-    return
-  fi
-  if ! diff -ru "$GOLDEN_DIR/$variant" "$SCRATCH/$variant"; then
-    echo "  FAIL: output differs from golden for $variant"
-    FAILURES=$((FAILURES + 1))
-  fi
+	# run_golden <variant-name> <source-yaml> <parse.py args...>
+	local variant="$1"
+	local source="$2"
+	shift 2
+	echo "test: golden $variant"
+	if ! "$PYTHON" "$PARSE_PY" --source "$source" \
+		--out-dir "$SCRATCH/$variant" "$@" >/dev/null; then
+		echo "  FAIL: parse.py errored for $variant"
+		FAILURES=$((FAILURES + 1))
+		return
+	fi
+	if ! diff -ru "$GOLDEN_DIR/$variant" "$SCRATCH/$variant"; then
+		echo "  FAIL: output differs from golden for $variant"
+		FAILURES=$((FAILURES + 1))
+	fi
 }
 
 # Non-tagged variants are generated from the plain-shaped fixture (string
 # skill items, bilingual cert text, meta.pdf_title, no tagged-only fields).
-run_golden plain-de   "$FIXTURE_PLAIN" --mode latex --style plain   --lang de
-run_golden plain-en   "$FIXTURE_PLAIN" --mode latex --style plain   --lang en
+run_golden plain-de "$FIXTURE_PLAIN" --mode latex --style plain --lang de
+run_golden plain-en "$FIXTURE_PLAIN" --mode latex --style plain --lang en
 run_golden sidebar-de "$FIXTURE_PLAIN" --mode latex --style sidebar --lang de
 run_golden sidebar-en "$FIXTURE_PLAIN" --mode latex --style sidebar --lang en
 # Example-CV styles. pw/dh/vs reuse the sidebar templates (see
@@ -78,12 +78,12 @@ run_golden sidebar-en "$FIXTURE_PLAIN" --mode latex --style sidebar --lang en
 # skills[].size (\cvskillbar), the optional concepts[] section
 # (\cvskillbubbles) and experience[].tags (\cvtechstack), so it is generated
 # from the tagged-shaped fixture.
-run_golden pw-de      "$FIXTURE_PLAIN" --mode latex --style pw      --lang de
-run_golden dh-de      "$FIXTURE_PLAIN" --mode latex --style dh      --lang de
-run_golden vs-en      "$FIXTURE_PLAIN" --mode latex --style vs      --lang en
-run_golden fs-en      "$FIXTURE_PLAIN" --mode latex --style fs      --lang en
-run_golden tagged-de  "$FIXTURE"       --mode latex --style tagged  --lang de
-run_golden web        "$FIXTURE"       --mode web
+run_golden pw-de "$FIXTURE_PLAIN" --mode latex --style pw --lang de
+run_golden dh-de "$FIXTURE_PLAIN" --mode latex --style dh --lang de
+run_golden vs-en "$FIXTURE_PLAIN" --mode latex --style vs --lang en
+run_golden fs-en "$FIXTURE_PLAIN" --mode latex --style fs --lang en
+run_golden tagged-de "$FIXTURE" --mode latex --style tagged --lang de
+run_golden web "$FIXTURE" --mode web
 
 # Minimal-contact variant: all optional contact fields (birthdate,
 # birthplace, address, location_signature, photo_path, signature_path)
@@ -91,13 +91,13 @@ run_golden web        "$FIXTURE"       --mode web
 # regress. Uses the dedicated cv-minimal-contact.yml fixture.
 echo "test: golden minimal-de"
 if ! "$PYTHON" "$PARSE_PY" --source "$TEST_DIR/cv-minimal-contact.yml" \
-    --out-dir "$SCRATCH/minimal-de" --mode latex --style plain --lang de \
-    >/dev/null; then
-  echo "  FAIL: parse.py errored for minimal-de"
-  FAILURES=$((FAILURES + 1))
+	--out-dir "$SCRATCH/minimal-de" --mode latex --style plain --lang de \
+	>/dev/null; then
+	echo "  FAIL: parse.py errored for minimal-de"
+	FAILURES=$((FAILURES + 1))
 elif ! diff -ru "$GOLDEN_DIR/minimal-de" "$SCRATCH/minimal-de"; then
-  echo "  FAIL: output differs from golden for minimal-de"
-  FAILURES=$((FAILURES + 1))
+	echo "  FAIL: output differs from golden for minimal-de"
+	FAILURES=$((FAILURES + 1))
 fi
 
 # --check on the valid fixture must pass. cv.yml is tagged-shaped, so it is
@@ -105,26 +105,26 @@ fi
 # below exercise both profiles against both fixtures).
 echo "test: --check valid fixture"
 if ! "$PYTHON" "$PARSE_PY" --source "$FIXTURE" --style tagged --check >/dev/null; then
-  echo "  FAIL: --check rejected the valid fixture"
-  FAILURES=$((FAILURES + 1))
+	echo "  FAIL: --check rejected the valid fixture"
+	FAILURES=$((FAILURES + 1))
 fi
 
 # --check on the minimal-contact fixture (optional contact fields omitted)
 # must also pass.
 echo "test: --check minimal-contact fixture"
 if ! "$PYTHON" "$PARSE_PY" --source "$TEST_DIR/cv-minimal-contact.yml" \
-    --check >/dev/null; then
-  echo "  FAIL: --check rejected the minimal-contact fixture"
-  FAILURES=$((FAILURES + 1))
+	--check >/dev/null; then
+	echo "  FAIL: --check rejected the minimal-contact fixture"
+	FAILURES=$((FAILURES + 1))
 fi
 
 # --check on the broken fixture must fail with a message.
 echo "test: --check broken fixture"
 if CHECK_OUT="$("$PYTHON" "$PARSE_PY" --source "$BROKEN" --check 2>&1)"; then
-  echo "  FAIL: --check accepted the broken fixture"
-  FAILURES=$((FAILURES + 1))
+	echo "  FAIL: --check accepted the broken fixture"
+	FAILURES=$((FAILURES + 1))
 else
-  echo "  ok: rejected with -> $CHECK_OUT"
+	echo "  ok: rejected with -> $CHECK_OUT"
 fi
 
 # Style-dependent schema profiles. --check selects the profile from --style
@@ -136,34 +136,100 @@ fi
 # plain fixture carries it and still passes plain --check above.
 
 check_pass() {
-  # check_pass <label> <source> <style>
-  echo "test: --check $1"
-  if ! "$PYTHON" "$PARSE_PY" --source "$2" --style "$3" --check >/dev/null 2>&1; then
-    echo "  FAIL: --style $3 --check rejected $1 (expected PASS)"
-    FAILURES=$((FAILURES + 1))
-  fi
+	# check_pass <label> <source> <style>
+	echo "test: --check $1"
+	if ! "$PYTHON" "$PARSE_PY" --source "$2" --style "$3" --check >/dev/null 2>&1; then
+		echo "  FAIL: --style $3 --check rejected $1 (expected PASS)"
+		FAILURES=$((FAILURES + 1))
+	fi
 }
 
 check_fail() {
-  # check_fail <label> <source> <style>
-  echo "test: --check $1"
-  if CHECK_OUT="$("$PYTHON" "$PARSE_PY" --source "$2" --style "$3" --check 2>&1)"; then
-    echo "  FAIL: --style $3 --check accepted $1 (expected FAIL)"
-    FAILURES=$((FAILURES + 1))
-  else
-    echo "  ok: rejected with -> $CHECK_OUT"
-  fi
+	# check_fail <label> <source> <style>
+	echo "test: --check $1"
+	if CHECK_OUT="$("$PYTHON" "$PARSE_PY" --source "$2" --style "$3" --check 2>&1)"; then
+		echo "  FAIL: --style $3 --check accepted $1 (expected FAIL)"
+		FAILURES=$((FAILURES + 1))
+	else
+		echo "  ok: rejected with -> $CHECK_OUT"
+	fi
 }
 
-check_pass "plain profile on plain fixture"   "$FIXTURE_PLAIN" plain
-check_fail "tagged profile on plain fixture"  "$FIXTURE_PLAIN" tagged
-check_pass "tagged profile on tagged fixture" "$FIXTURE"       tagged
-check_fail "plain profile on tagged fixture"  "$FIXTURE"       plain
+check_pass "plain profile on plain fixture" "$FIXTURE_PLAIN" plain
+check_fail "tagged profile on plain fixture" "$FIXTURE_PLAIN" tagged
+check_pass "tagged profile on tagged fixture" "$FIXTURE" tagged
+check_fail "plain profile on tagged fixture" "$FIXTURE" plain
+
+# Merged multi-style source. test/cv-merged.yml mechanically combines the
+# two profile fixtures into ONE document whose entries address their style
+# via per-entry `targets` tokens (cv-plain-style | cv-tagged-ia) instead of
+# the generic `latex`, with the plain side's meta.pdf_title arriving through
+# `overrides.cv-plain-style` — half from the committed file, half from the
+# auto-merged cv-merged.local.yml sibling overlay. Emitting the merged file
+# per --target-style must reproduce the EXISTING goldens byte-for-byte,
+# proving that a plain+tagged merge preserves every consumer's output and
+# that per-style overrides + the local overlay deep-merge both work.
+FIXTURE_MERGED="$TEST_DIR/cv-merged.yml"
+MERGED_TARGETS="cv-plain-style,cv-tagged-ia"
+
+run_golden_merged() {
+	# run_golden_merged <golden-variant> <parse.py args...>
+	local variant="$1"
+	shift
+	echo "test: golden $variant (merged source)"
+	if ! "$PYTHON" "$PARSE_PY" --source "$FIXTURE_MERGED" \
+		--valid-targets "$MERGED_TARGETS" \
+		--out-dir "$SCRATCH/merged-$variant" "$@" >/dev/null; then
+		echo "  FAIL: parse.py errored for merged $variant"
+		FAILURES=$((FAILURES + 1))
+		return
+	fi
+	if ! diff -ru "$GOLDEN_DIR/$variant" "$SCRATCH/merged-$variant"; then
+		echo "  FAIL: merged-source output differs from golden for $variant"
+		FAILURES=$((FAILURES + 1))
+	fi
+}
+
+run_golden_merged plain-de --mode latex --style plain --lang de \
+	--target-style cv-plain-style
+run_golden_merged plain-en --mode latex --style plain --lang en \
+	--target-style cv-plain-style
+run_golden_merged tagged-de --mode latex --style tagged --lang de \
+	--target-style cv-tagged-ia
+run_golden_merged web --mode web
+
+# The merged source must --check cleanly under BOTH styles (each style
+# validates only the entries targeting it, under its own profile) ...
+echo "test: --check merged source (per style)"
+if ! "$PYTHON" "$PARSE_PY" --source "$FIXTURE_MERGED" --style plain \
+	--target-style cv-plain-style --valid-targets "$MERGED_TARGETS" \
+	--check >/dev/null 2>&1; then
+	echo "  FAIL: --check rejected the merged source for cv-plain-style"
+	FAILURES=$((FAILURES + 1))
+fi
+if ! "$PYTHON" "$PARSE_PY" --source "$FIXTURE_MERGED" --style tagged \
+	--target-style cv-tagged-ia --valid-targets "$MERGED_TARGETS" \
+	--check >/dev/null 2>&1; then
+	echo "  FAIL: --check rejected the merged source for cv-tagged-ia"
+	FAILURES=$((FAILURES + 1))
+fi
+
+# ... and be rejected when the style tokens are NOT registered via
+# --valid-targets: unknown `targets` tokens must fail loudly (validated on
+# the unfiltered document) rather than silently dropping entries.
+echo "test: --check merged source without --valid-targets"
+if CHECK_OUT="$("$PYTHON" "$PARSE_PY" --source "$FIXTURE_MERGED" \
+	--style plain --check 2>&1)"; then
+	echo "  FAIL: --check accepted unregistered style tokens"
+	FAILURES=$((FAILURES + 1))
+else
+	echo "  ok: rejected with -> $CHECK_OUT"
+fi
 
 echo
 if [ "$FAILURES" -eq 0 ]; then
-  echo "All cv/parse tests passed."
+	echo "All cv/parse tests passed."
 else
-  echo "$FAILURES cv/parse test(s) failed."
+	echo "$FAILURES cv/parse test(s) failed."
 fi
 [ "$FAILURES" -eq 0 ]

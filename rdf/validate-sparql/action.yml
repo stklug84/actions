@@ -1,0 +1,69 @@
+---
+# Composite action: validate SPARQL query syntax with rdflib.
+#
+# Sets up Python, installs rdflib (PEP 440 specifier, range or exact),
+# and parses every file matching the given glob pattern(s) with
+# rdflib's prepareQuery, printing OK/FAIL per file and failing when
+# any file is invalid or no file matches.
+#
+# Limitation: prepareQuery implements the SPARQL 1.1 *Query* grammar
+# only (SELECT / CONSTRUCT / ASK / DESCRIBE); SPARQL *Update* requests
+# (INSERT / DELETE / LOAD / ...) are reported as syntax errors — keep
+# update scripts out of the matched patterns.
+#
+# Requires the repository to be checked out first (actions/checkout).
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - uses: stklug84/actions/rdf/validate-sparql@v2
+#     with:
+#       glob: "**/*.rq"   # optional; space-separated patterns
+name: Validate SPARQL with rdflib
+description: >-
+  Validate SPARQL query files by parsing them with rdflib's
+  prepareQuery (SPARQL 1.1 Query grammar; Update not covered).
+
+inputs:
+  glob:
+    description: >-
+      Space-separated glob pattern(s) selecting the files to validate
+      (Python pathlib style, relative to the working directory; `**`
+      matches any number of directories).
+    required: false
+    default: "**/*.rq"
+  python-version:
+    description: Python version for actions/setup-python.
+    required: false
+    default: "3.12"
+  rdflib-version:
+    description: >-
+      PEP 440 version specifier appended to "rdflib" for pip (exact
+      pin like "==7.1.4" or a range like ">=7,<8").
+    required: false
+    default: ">=7,<8"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install rdflib
+      shell: bash
+      env:
+        RDFLIB_VERSION: ${{ inputs.rdflib-version }}
+      run: |
+        set -euo pipefail
+        pip install --user "rdflib${RDFLIB_VERSION}"
+        python3 -c 'import rdflib; print(f"rdflib {rdflib.__version__}")'
+
+    - name: Validate SPARQL files
+      shell: bash
+      env:
+        GLOB: ${{ inputs.glob }}
+      run: |
+        set -euo pipefail
+        read -ra PATTERNS <<< "$GLOB"
+        python3 "$GITHUB_ACTION_PATH/scripts/validate.py" "${PATTERNS[@]}"

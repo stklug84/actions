@@ -1,0 +1,89 @@
+---
+# Composite action: lint Python sources with Ruff (lint + format check).
+#
+# Installs a pinned Ruff release with `pip install --user`, runs
+# `ruff check` over the given paths, and (optionally) verifies the
+# formatting with `ruff format --check`. A Ruff configuration file
+# (ruff.toml or a pyproject.toml with a [tool.ruff] table) may be
+# passed explicitly via `config`; left empty, Ruff's own configuration
+# auto-discovery applies.
+#
+# Requires the repository to be checked out first (actions/checkout)
+# and a Python with pip on PATH (preinstalled on ubuntu-latest).
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - uses: stklug84/actions/python/lint@v2
+#     with:
+#       paths: "src tests"       # optional; default "."
+#       config: pyproject.toml   # optional; empty → auto-discovery
+name: Ruff lint and format check
+description: >-
+  Lint Python sources with a pinned Ruff release (`ruff check`) and
+  optionally verify the formatting (`ruff format --check`).
+
+inputs:
+  paths:
+    description: Space-separated files/directories to lint.
+    required: false
+    default: "."
+  ruff-version:
+    description: Ruff release to install (pinned).
+    required: false
+    default: "0.16.0"
+  config:
+    description: >-
+      Optional path to a Ruff configuration file (ruff.toml or a
+      pyproject.toml), passed via --config. Empty → Ruff's own
+      configuration auto-discovery.
+    required: false
+    default: ""
+  check-format:
+    description: Also run `ruff format --check` (true/false).
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Install ruff
+      shell: bash
+      env:
+        RUFF_VERSION: ${{ inputs.ruff-version }}
+      run: |
+        set -euo pipefail
+        pip install --user "ruff==${RUFF_VERSION}"
+        ruff --version
+
+    - name: Run ruff (lint)
+      shell: bash
+      env:
+        PATHS: ${{ inputs.paths }}
+        CONFIG: ${{ inputs.config }}
+      run: |
+        set -euo pipefail
+        read -ra TARGETS <<< "$PATHS"
+        ARGS=()
+        if [ -n "$CONFIG" ]; then
+          ARGS+=(--config "$CONFIG")
+        fi
+        ruff check "${ARGS[@]}" "${TARGETS[@]}"
+
+    - name: Run ruff (format check)
+      shell: bash
+      env:
+        PATHS: ${{ inputs.paths }}
+        CONFIG: ${{ inputs.config }}
+        CHECK_FORMAT: ${{ inputs.check-format }}
+      run: |
+        set -euo pipefail
+        if [ "$CHECK_FORMAT" != "true" ]; then
+          echo "check-format=false; skipping ruff format --check."
+          exit 0
+        fi
+        read -ra TARGETS <<< "$PATHS"
+        ARGS=()
+        if [ -n "$CONFIG" ]; then
+          ARGS+=(--config "$CONFIG")
+        fi
+        ruff format --check "${ARGS[@]}" "${TARGETS[@]}"

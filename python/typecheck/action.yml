@@ -1,0 +1,85 @@
+---
+# Composite action: type-check Python sources with mypy (strict).
+#
+# Installs a pinned mypy release with `pip install --user` (plus any
+# extra packages needed for type stubs / third-party imports) and runs
+# mypy over the given paths. `--strict` is passed by default; when a
+# configuration file governs the strictness settings, callers can set
+# `strict: "false"` and pass the file via `config` (--config-file).
+#
+# Requires the repository to be checked out first (actions/checkout)
+# and a Python with pip on PATH (preinstalled on ubuntu-latest).
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - uses: stklug84/actions/python/typecheck@v2
+#     with:
+#       paths: "scripts/parse.py"          # optional; default "."
+#       extra-deps: "types-PyYAML Jinja2"  # optional stub/import deps
+name: mypy strict type check
+description: >-
+  Type-check Python sources with a pinned mypy release, strict by
+  default, with optional stub/import dependencies.
+
+inputs:
+  paths:
+    description: Space-separated files/directories to type-check.
+    required: false
+    default: "."
+  mypy-version:
+    description: mypy release to install (pinned).
+    required: false
+    default: "1.19.0"
+  strict:
+    description: >-
+      Pass --strict to mypy (true/false). Set to "false" when a
+      configuration file governs the strictness settings.
+    required: false
+    default: "true"
+  config:
+    description: >-
+      Optional path to a mypy configuration file, passed via
+      --config-file. Empty → mypy's own configuration auto-discovery.
+    required: false
+    default: ""
+  extra-deps:
+    description: >-
+      Optional space-separated pip packages installed alongside mypy
+      (type stubs and third-party imports, e.g. "types-PyYAML Jinja2").
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install mypy
+      shell: bash
+      env:
+        MYPY_VERSION: ${{ inputs.mypy-version }}
+        EXTRA_DEPS: ${{ inputs.extra-deps }}
+      run: |
+        set -euo pipefail
+        pip install --user "mypy==${MYPY_VERSION}"
+        if [ -n "$EXTRA_DEPS" ]; then
+          read -ra DEPS <<< "$EXTRA_DEPS"
+          pip install --user "${DEPS[@]}"
+        fi
+        mypy --version
+
+    - name: Run mypy
+      shell: bash
+      env:
+        PATHS: ${{ inputs.paths }}
+        STRICT: ${{ inputs.strict }}
+        CONFIG: ${{ inputs.config }}
+      run: |
+        set -euo pipefail
+        read -ra TARGETS <<< "$PATHS"
+        ARGS=()
+        if [ "$STRICT" = "true" ]; then
+          ARGS+=(--strict)
+        fi
+        if [ -n "$CONFIG" ]; then
+          ARGS+=(--config-file "$CONFIG")
+        fi
+        mypy "${ARGS[@]}" "${TARGETS[@]}"
