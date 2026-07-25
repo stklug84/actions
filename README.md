@@ -491,6 +491,39 @@ the repository to be checked out first (`actions/checkout`).
 | `robot-version` | `"1.9.8"`  | ROBOT release to install (pinned `robot.jar`).                   |
 | `java-version`  | `"21"`     | JDK version for `actions/setup-java`.                            |
 
+## `rdf/generate-individuals`
+
+Run a repository-local RDF instance-graph generation pipeline with pinned
+Python + [rdflib](https://rdflib.readthedocs.io/) and a cached remote API
+response directory (`actions/cache`, keyed on the generator's source
+inventory). Drives the three generator stages `fetch` → `generate` →
+`collection` via `python3 <generator> <stage>`; optional prepare/finalize
+shell commands bracket the pipeline for repo-specific extract and
+post-processing steps. Requires the repository to be checked out first
+(`actions/checkout`).
+
+```yaml
+- uses: actions/checkout@v7
+- uses: stklug84/actions/rdf/generate-individuals@v2
+  with:
+    prepare-command: python3 scripts/build_vocab.py
+    finalize-command: python3 scripts/update_imports.py
+```
+
+| Input              | Default                                | Description                                          |
+|--------------------|----------------------------------------|------------------------------------------------------|
+| `generator`        | `"scripts/generate_individuals.py"`    | Generator script, run as `python3 <generator> <stage>`. |
+| `prepare-command`  | `""`                                   | Shell command before `fetch`; empty skips.           |
+| `finalize-command` | `""`                                   | Shell command after `collection`; empty skips.       |
+| `python-version`   | `"3.12"`                               | Python version for `actions/setup-python`.           |
+| `rdflib-version`   | `">=7,<8"`                             | PEP 440 specifier for pip; empty skips the install.  |
+| `cache-dir`        | `"/tmp/scryfall_cache"`                | API response cache directory (saved/restored).       |
+| `cache-key`        | `"scryfall-cache"`                     | Cache key prefix.                                    |
+| `cache-hash-files` | `"collection.csv"`                     | `hashFiles` pattern(s) mixed into the cache key.     |
+| `run-fetch`        | `"true"`                               | Run the `fetch` stage.                               |
+| `run-generate`     | `"true"`                               | Run the `generate` stage.                            |
+| `run-collection`   | `"true"`                               | Run the `collection` stage.                          |
+
 ## Linting
 
 Pull requests against `main` run the `Lint` workflow
