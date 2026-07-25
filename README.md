@@ -241,19 +241,34 @@ Parse a canonical, bilingual (`de`/`en`) `cv.yml` — the single source of
 truth — and emit consumer-specific outputs. In **`latex`** mode it writes
 one `.tex` file per section for a selected `style` (`plain` |
 `sidebar`) and `lang` (`de` | `en`), filtered to entries whose `targets`
-contains `latex`. In **`web`** mode it writes a single `cv.yml` in
-skcloud's exact schema (English, filtered to entries whose `targets`
-contains `web`). A `check` mode validates the schema and writes nothing,
-exiting nonzero with a clear message on the first violation. Validation is
-**style-dependent**: `style` selects one of two schema profiles — `plain`
+contains `latex` or the `target-style` manifest style name. In **`web`**
+mode it writes a single `cv.yml` in skcloud's exact schema (English,
+filtered to entries whose `targets` contains `web`). A `check` mode
+validates the schema and writes nothing, exiting nonzero with a clear
+message on the first violation. Validation is **style-dependent and per
+entry**: `style` selects one of two schema profiles — `plain`
 (plain/sidebar/pw/dh/vs/fs: bilingual `certifications[].text` and
 plain-string `skills[].items`; tagged-only fields rejected) or `tagged`
 (structured certifications, `{name, size}` skill items, and the optional
-`concepts[]` / `interests[].icon` / `conferences[].lat`/`lon`).
+`concepts[]` / `interests[].icon` / `conferences[].lat`/`lon`) — applied
+to the entries the selected target consumes.
 `meta.pdf_title` is accepted by both; `web` mode always validates against
 the `tagged` profile. Implemented in Python 3 (PyYAML + Jinja2, installed
 by the wrapper at pinned versions); a thin bash step drives it. Requires
 the repository to be checked out first (`actions/checkout`).
+
+**Merged multi-style sources.** One source can feed several presentation
+styles with per-entry selection: pass `valid-targets` (comma-separated
+manifest style names, e.g. `cv-plain-style,cv-tagged-ia`) to register the
+style names as accepted `targets` tokens, and `target-style` to select the
+entries for the style being emitted/checked (matching entries name the
+style or the generic `latex`). An optional top-level `overrides.<style>`
+block carries per-style `meta`/`contact` deltas (deep-merged over the base
+for that style), and a gitignored sibling `<source-stem>.local.yml`
+overlay (e.g. `data/cv.local.yml`) is deep-merged over the source when
+present — the designated home for local-only PII fields. `id` uniqueness
+is scoped per selected style; `targets` tokens are validated on the
+unfiltered document so typo'd style names fail loudly.
 
 ```yaml
 # LaTeX: per-section .tex files (sidebar style, German).
@@ -295,9 +310,11 @@ the repository to be checked out first (`actions/checkout`).
 | `source`  | `data/cv.yml`  | Path to the canonical bilingual `cv.yml`.                         |
 | `mode`    | `latex`        | Output mode — `latex` or `web`.                                   |
 | `style`   | `plain`        | LaTeX style (latex mode only) — `plain`, `sidebar`, or an example-CV style `pw`/`dh`/`vs`/`fs`/`ia`. |
+| `target-style` | `""`      | Manifest style name (e.g. `cv-tagged-ia`) selecting entries whose `targets` name this style (besides `latex`) and the matching `overrides.<style>` block. Empty → single-style behaviour. |
+| `valid-targets` | `""`     | Comma-separated extra `targets` tokens to accept (typically every manifest style name). Empty → only `latex` and `web`. |
 | `lang`    | `de`           | Language — `de` or `en` (latex mode; web is always English).      |
 | `out-dir` | —              | Directory the generated files are written into. Required.         |
-| `check`   | `"false"`      | `true` → validate the schema (under the `style` profile) and write nothing (fails on error). |
+| `check`   | `"false"`      | `true` → validate the schema (under the `style` profile, scoped to the `target-style` selection) and write nothing (fails on error). |
 
 Outputs are written as files into `out-dir` (the action sets no step
 outputs):

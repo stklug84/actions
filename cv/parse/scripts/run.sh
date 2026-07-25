@@ -8,7 +8,9 @@
 #	Thin wrapper around scripts/parse.py for the cv/parse composite
 #	action. Driven entirely by environment variables set in
 #	action.yml: SOURCE (canonical cv.yml), MODE (latex | web),
-#	STYLE (plain | sidebar, latex only), CV_LANG (de | en — named
+#	STYLE (plain | sidebar, latex only), TARGET_STYLE (manifest style
+#	name for merged multi-style sources), VALID_TARGETS (extra target
+#	tokens, comma-separated), CV_LANG (de | en — named
 #	CV_LANG, not LANG, to avoid clobbering the system locale),
 #	OUT_DIR (output directory), and CHECK ('true'/'false' — validate
 #	only, write nothing). Ensures PyYAML and Jinja2 are present at the
@@ -30,6 +32,8 @@ JINJA2_VERSION="3.1.5"
 SOURCE="${SOURCE:-data/cv.yml}"
 MODE="${MODE:-latex}"
 STYLE="${STYLE:-plain}"
+TARGET_STYLE="${TARGET_STYLE:-}"
+VALID_TARGETS="${VALID_TARGETS:-}"
 LANG_IN="${CV_LANG:-de}"
 OUT_DIR="${OUT_DIR:?OUT_DIR is required}"
 CHECK="${CHECK:-false}"
@@ -40,23 +44,32 @@ err() { echo "::error::$*" >&2; }
 
 # Ensure the pinned dependencies are importable; install on demand.
 if ! python3 -c 'import yaml, jinja2' >/dev/null 2>&1; then
-  echo "Installing PyYAML==$PYYAML_VERSION and Jinja2==$JINJA2_VERSION"
-  python3 -m pip install --user --quiet \
-    "PyYAML==$PYYAML_VERSION" "Jinja2==$JINJA2_VERSION"
+	echo "Installing PyYAML==$PYYAML_VERSION and Jinja2==$JINJA2_VERSION"
+	python3 -m pip install --user --quiet \
+		"PyYAML==$PYYAML_VERSION" "Jinja2==$JINJA2_VERSION"
 fi
 
 ARGS=(--source "$SOURCE" --mode "$MODE" --out-dir "$OUT_DIR")
 
 case "$CHECK" in
-  true|1|yes) ARGS+=(--check) ;;
-  *) ;;
+true | 1 | yes) ARGS+=(--check) ;;
+*) ;;
 esac
 
 if [ "$MODE" = "latex" ]; then
-  ARGS+=(--style "$STYLE" --lang "$LANG_IN")
+	ARGS+=(--style "$STYLE" --lang "$LANG_IN")
+fi
+
+# Merged multi-style sources: select entries per manifest style name and
+# extend the accepted `targets` vocabulary (see parse.py --help).
+if [ -n "$TARGET_STYLE" ]; then
+	ARGS+=(--target-style "$TARGET_STYLE")
+fi
+if [ -n "$VALID_TARGETS" ]; then
+	ARGS+=(--valid-targets "$VALID_TARGETS")
 fi
 
 if ! python3 "$SCRIPT_DIR/parse.py" "${ARGS[@]}"; then
-  err "cv/parse failed (mode=$MODE style=$STYLE lang=$LANG_IN)."
-  exit 1
+	err "cv/parse failed (mode=$MODE style=$STYLE lang=$LANG_IN)."
+	exit 1
 fi

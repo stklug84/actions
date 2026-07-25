@@ -5,9 +5,18 @@ Two output modes:
 
 * ``latex`` — per-section ``.tex`` files for a selected ``--style``
   (``plain`` | ``sidebar``) and ``--lang`` (``de`` | ``en``), filtered to
-  entries whose ``targets`` contains ``latex``.
+  entries whose ``targets`` contains ``latex`` or the ``--target-style``
+  manifest style name (e.g. ``cv-tagged-ia``), enabling one merged source
+  to feed several presentation styles with per-entry selection.
 * ``web`` — a single ``cv.yml`` in skcloud's exact schema (English,
   filtered to entries whose ``targets`` contains ``web``).
+
+Multi-style sources: ``--valid-targets`` extends the accepted ``targets``
+tokens with the manifest style names, an optional top-level ``overrides``
+mapping carries per-style ``meta``/``contact`` deltas (deep-merged onto
+the base for the selected ``--target-style``), and a gitignored sibling
+``<source-stem>.local.yml`` overlay (e.g. ``data/cv.local.yml``) is
+deep-merged over the source when present (for local-only PII fields).
 
 A ``--check`` mode validates the schema and writes nothing, exiting
 nonzero with a clear message on the first violation. Validation is
@@ -52,6 +61,19 @@ REQUIRED_TOP_LEVEL = [
 VALID_TARGETS = {"latex", "web"}
 VALID_KINDS = {"work", "study", "cert"}
 DEFAULT_TARGETS = ["latex", "web"]
+
+# Module-level target configuration, extended by main() from the CLI:
+#   * ALLOWED_TARGETS  — every token accepted in `targets` lists. Base
+#     {latex, web} plus any --valid-targets (the manifest style names).
+#   * LATEX_TARGET_TOKENS — tokens that select an entry for LaTeX emission.
+#     Base {"latex"} plus the current --target-style, so a merged source
+#     can address one presentation style per entry while `latex` keeps
+#     meaning "every latex style" for single-style sources.
+ALLOWED_TARGETS: set[str] = set(VALID_TARGETS)
+LATEX_TARGET_TOKENS: set[str] = {"latex"}
+
+# Top-level keys the optional per-style `overrides.<style>` block may carry.
+OVERRIDABLE_KEYS = {"meta", "contact"}
 
 # Section -> output filename for the LaTeX mode.
 LATEX_SECTION_FILES = {
@@ -121,15 +143,137 @@ class CheckError(Exception):
 # --------------------------------------------------------------------------
 # Loading
 # --------------------------------------------------------------------------
+def _deep_merge(base: Any, overlay: Any) -> Any:
+    """Recursively merge ``overlay`` onto ``base``.
+
+    Mappings merge key-wise (recursing into nested mappings); every other
+    value type (scalars, lists) is replaced by the overlay value.
+    """
+    if isinstance(base, dict) and isinstance(overlay, dict):
+        merged = dict(base)
+        for key, value in overlay.items():
+            merged[key] = _deep_merge(base.get(key), value) if key in base else value
+        return merged
+    return overlay
+
+
 def load_cv(path: Path) -> dict[str, Any]:
-    """Load the canonical cv.yml with ``yaml.safe_load`` only."""
+    """Load the canonical cv.yml with ``yaml.safe_load`` only.
+
+    When a sibling ``<stem>.local.yml`` overlay exists (e.g.
+    ``data/cv.local.yml`` next to ``data/cv.yml``), it is deep-merged over
+    the source. The overlay is the designated home for gitignored,
+    local-only fields (PII such as birthdate/address) so the committed
+    source stays clean while local builds see the full document.
+    """
     if not path.is_file():
         raise CheckError(f"source not found: {path}")
     with path.open(encoding="utf-8") as handle:
         data = yaml.safe_load(handle)
     if not isinstance(data, dict):
         raise CheckError(f"{path}: top-level YAML must be a mapping")
+    overlay_path = path.with_name(f"{path.stem}.local.yml")
+    if overlay_path.is_file():
+        with overlay_path.open(encoding="utf-8") as handle:
+            overlay = yaml.safe_load(handle)
+        if overlay is not None:
+            if not isinstance(overlay, dict):
+                raise CheckError(f"{overlay_path}: top-level YAML must be a mapping")
+            # Two mappings in -> a mapping out (see _deep_merge).
+            data = dict(_deep_merge(data, overlay))
     return data
+
+
+# Sections whose entries carry per-entry `targets` selection.
+TARGETED_SECTIONS = [
+    "experience",
+    "education",
+    "conferences",
+    "skills",
+    "languages",
+    "certifications",
+    "interests",
+    "concepts",
+]
+
+
+def apply_overrides(data: dict[str, Any], target_style: str | None) -> dict[str, Any]:
+    """Apply the per-style ``overrides.<target_style>`` block, if any.
+
+    A multi-style source may carry a top-level ``overrides`` mapping of
+    manifest style names to ``{meta, contact}`` deltas. For the selected
+    ``--target-style`` the delta is deep-merged onto the base ``meta`` /
+    ``contact``; blocks for other styles are ignored. The ``overrides``
+    key itself is removed from the returned document either way.
+    """
+    if "overrides" not in data:
+        return data
+    overrides = data["overrides"]
+    if not isinstance(overrides, dict):
+        raise CheckError("overrides: must be a mapping of style names")
+    result = {key: value for key, value in data.items() if key != "overrides"}
+    if target_style is None or target_style not in overrides:
+        return result
+    block = overrides[target_style]
+    if not isinstance(block, dict):
+        raise CheckError(f"overrides.{target_style}: must be a mapping")
+    unknown = sorted(set(block) - OVERRIDABLE_KEYS)
+    if unknown:
+        raise CheckError(
+            f"overrides.{target_style}: unknown key(s) {unknown}; "
+            f"allowed: {sorted(OVERRIDABLE_KEYS)} "
+            "(sections are selected per entry via `targets` instead)"
+        )
+    for key, value in block.items():
+        result[key] = _deep_merge(result.get(key), value)
+    return result
+
+
+def validate_targets(data: dict[str, Any]) -> None:
+    """Validate the ``targets`` tokens of every entry, pre-filtering.
+
+    Runs on the UNFILTERED document so a typo'd style name (which would
+    silently drop the entry from every consumer) is rejected loudly instead
+    of vanishing. Shape errors of the entries themselves are left to the
+    profile validators, which run on the filtered document.
+    """
+    for section in TARGETED_SECTIONS:
+        entries = data.get(section)
+        if not isinstance(entries, list):
+            continue
+        for index, entry in enumerate(entries):
+            if isinstance(entry, dict):
+                _targets_of(entry, f"{section}[{index}]")
+
+
+def filter_doc(data: dict[str, Any], tokens: set[str]) -> dict[str, Any]:
+    """Return a copy of ``data`` with sections filtered to matching entries.
+
+    An entry matches when its (possibly defaulted) ``targets`` intersects
+    ``tokens``. Both validation and emission run on the filtered document,
+    so schema profiles apply only to the entries a style actually consumes
+    — a merged multi-style source may carry plain- and tagged-shaped
+    entries side by side, and id uniqueness is scoped per style.
+    """
+
+    def _matches(entry: Any) -> bool:
+        # Malformed entries/targets are kept so validation reports them.
+        if not isinstance(entry, dict):
+            return True
+        targets = entry.get("targets")
+        if targets is None:
+            targets = DEFAULT_TARGETS
+        if not isinstance(targets, list):
+            return True
+        return bool(tokens & set(targets))
+
+    result = dict(data)
+    for section in TARGETED_SECTIONS:
+        entries = data.get(section)
+        if not isinstance(entries, list):
+            continue
+        result[section] = [entry for entry in entries if _matches(entry)]
+    return result
 
 
 # --------------------------------------------------------------------------
@@ -142,10 +286,10 @@ def _targets_of(entry: dict[str, Any], where: str) -> list[str]:
         return list(DEFAULT_TARGETS)
     if not isinstance(targets, list) or not all(isinstance(t, str) for t in targets):
         raise CheckError(f"{where}: targets must be a list of strings")
-    invalid = [t for t in targets if t not in VALID_TARGETS]
+    invalid = [t for t in targets if t not in ALLOWED_TARGETS]
     if invalid:
         raise CheckError(
-            f"{where}: invalid target(s) {invalid}; allowed: {sorted(VALID_TARGETS)}"
+            f"{where}: invalid target(s) {invalid}; allowed: {sorted(ALLOWED_TARGETS)}"
         )
     return targets
 
@@ -375,8 +519,13 @@ def _reject_tagged_only(data: dict[str, Any], style: str) -> None:
     ``concepts[]``, ``interests[].icon`` or ``conferences[].lat``/``lon``;
     a source carrying them under such a style is almost certainly authored
     for the wrong style, so we fail loudly rather than silently ignore them.
+
+    Validation runs on the target-filtered document, so ``concepts`` is only
+    rejected when entries actually remain for this style — a merged
+    multi-style source may carry concepts addressed to a tagged style; the
+    plain filter removes them (an empty or emptied list is tolerated).
     """
-    if "concepts" in data:
+    if data.get("concepts"):
         raise CheckError(
             f"concepts: not allowed for the '{style}' style (tagged-only field)"
         )
@@ -453,7 +602,8 @@ def _validate_tagged(data: dict[str, Any]) -> None:
     # concepts[] — OPTIONAL (consumed only by \cvskillbubbles). When present
     # it is a list of {text: non-empty str, size: number}. ``size`` is the
     # bubble weight, left unbounded (the style scales it via its radius
-    # formula; sources tune it freely — see data/cv-databricks.yml).
+    # formula; sources tune it freely — see the curriculum-vitae repo's
+    # data/cv.yml).
     if "concepts" in data:
         concepts = data["concepts"]
         if not isinstance(concepts, list):
@@ -693,6 +843,18 @@ def _has_target(entry: dict[str, Any], target: str) -> bool:
     return target in targets
 
 
+def _has_latex_target(entry: dict[str, Any]) -> bool:
+    """True when the entry addresses LaTeX emission.
+
+    Matches the generic ``latex`` token or the current ``--target-style``
+    manifest style name (see :data:`LATEX_TARGET_TOKENS`).
+    """
+    targets = entry.get("targets")
+    if targets is None:
+        targets = DEFAULT_TARGETS
+    return bool(LATEX_TARGET_TOKENS & set(targets))
+
+
 def _pick(value: Any, lang: str) -> Any:
     """Pick the language variant of a bilingual mapping, else passthrough."""
     if isinstance(value, dict) and "de" in value and "en" in value:
@@ -706,7 +868,7 @@ def _pick(value: Any, lang: str) -> Any:
 def _latex_experience(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
     rows = []
     for entry in data["experience"]:
-        if not _has_target(entry, "latex"):
+        if not _has_latex_target(entry):
             continue
         rows.append(
             {
@@ -735,7 +897,7 @@ def _latex_experience(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
 def _latex_education(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
     rows = []
     for entry in data["education"]:
-        if not _has_target(entry, "latex"):
+        if not _has_latex_target(entry):
             continue
         rows.append(
             {
@@ -753,7 +915,7 @@ def _latex_conferences(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
     # Group conferences by year (descending) for the longtable layout.
     by_year: dict[int, list[dict[str, Any]]] = {}
     for entry in data["conferences"]:
-        if not _has_target(entry, "latex"):
+        if not _has_latex_target(entry):
             continue
         by_year.setdefault(entry["year"], []).append(
             {
@@ -780,7 +942,7 @@ def _latex_conf_heatmap(data: dict[str, Any], lang: str) -> list[dict[str, Any]]
     """
     buckets: dict[tuple[float, float], dict[str, Any]] = {}
     for entry in data["conferences"]:
-        if not _has_target(entry, "latex"):
+        if not _has_latex_target(entry):
             continue
         if "lat" not in entry or "lon" not in entry:
             continue
@@ -810,7 +972,7 @@ def _latex_skills(
     """
     rows = []
     for entry in data["skills"]:
-        if not _has_target(entry, "latex"):
+        if not _has_latex_target(entry):
             continue
         if profile == "tagged":
             items = [
@@ -838,7 +1000,7 @@ def _latex_concepts(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
     """
     rows = []
     for entry in data.get("concepts", []) or []:
-        if not _has_target(entry, "latex"):
+        if not _has_latex_target(entry):
             continue
         rows.append(
             {
@@ -852,7 +1014,7 @@ def _latex_concepts(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
 def _latex_languages(data: dict[str, Any], lang: str) -> list[dict[str, Any]]:
     rows = []
     for entry in data["languages"]:
-        if not _has_target(entry, "latex"):
+        if not _has_latex_target(entry):
             continue
         rows.append(
             {
@@ -876,7 +1038,7 @@ def _latex_interests(data: dict[str, Any], lang: str) -> list[dict[str, str]]:
     return [
         {"text": _pick(entry, lang), "icon": entry.get("icon", "") or ""}
         for entry in data["interests"]
-        if _has_target(entry, "latex")
+        if _has_latex_target(entry)
     ]
 
 
@@ -894,7 +1056,7 @@ def _latex_certifications(
     """
     rows = []
     for entry in data["certifications"]:
-        if not _has_target(entry, "latex"):
+        if not _has_latex_target(entry):
             continue
         if profile == "tagged":
             code = entry["code"]
@@ -1150,13 +1312,53 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source", default="data/cv.yml", type=Path)
     parser.add_argument("--mode", choices=["latex", "web"], default="latex")
     parser.add_argument("--style", choices=LATEX_STYLES, default="plain")
+    parser.add_argument(
+        "--target-style",
+        dest="target_style",
+        help=(
+            "manifest style name (e.g. cv-tagged-ia) selecting entries whose "
+            "`targets` name this style (in addition to the generic `latex` "
+            "token) and the matching `overrides.<style>` block"
+        ),
+    )
+    parser.add_argument(
+        "--valid-targets",
+        dest="valid_targets",
+        default="",
+        help=(
+            "comma-separated extra target tokens to accept in `targets` "
+            "lists (typically every manifest style name)"
+        ),
+    )
     parser.add_argument("--lang", choices=["de", "en"], default="de")
     parser.add_argument("--out-dir", dest="out_dir", type=Path)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
 
+    # Extend the target vocabulary from the CLI: --valid-targets registers
+    # extra tokens as valid in `targets` lists; --target-style additionally
+    # makes its style name select entries for LaTeX emission.
+    ALLOWED_TARGETS.update(
+        token.strip() for token in args.valid_targets.split(",") if token.strip()
+    )
+    if args.target_style:
+        ALLOWED_TARGETS.add(args.target_style)
+        LATEX_TARGET_TOKENS.add(args.target_style)
+
     try:
         data = load_cv(args.source)
+        # Apply the per-style meta/contact overrides, then reduce the
+        # document to the entries the selected consumer actually reads
+        # (latex tokens for LaTeX mode, `web` for web mode). Validation and
+        # emission both run on this effective document, so schema profiles
+        # and id uniqueness apply per style — a merged multi-style source
+        # may carry plain- and tagged-shaped entries side by side.
+        data = apply_overrides(data, args.target_style)
+        # Targets tokens are validated pre-filtering so a typo'd style name
+        # fails loudly instead of silently dropping the entry.
+        validate_targets(data)
+        tokens = {"web"} if args.mode == "web" else set(LATEX_TARGET_TOKENS)
+        data = filter_doc(data, tokens)
         # Validation is style-dependent: --style selects the schema profile
         # (plain vs tagged). The web emitter consumes the tagged shape
         # directly (structured certs + {name, size} skills) and is only ever

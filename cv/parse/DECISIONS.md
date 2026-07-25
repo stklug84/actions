@@ -123,6 +123,35 @@ The plain emitter normalizes each plain-string skill item to an internal
 `{name, size: None}` view-model so the plain/sidebar/fs templates
 (`map(attribute='name')`) need no change.
 
+### Merged multi-style sources (per-style targets, overrides, overlays)
+
+**Decision: apply the schema profiles per entry, not per file**, so one
+merged source can carry plain- and tagged-shaped entries side by side.
+`--valid-targets` registers the manifest style names (e.g.
+`cv-plain-style,cv-tagged-ia`) as accepted `targets` tokens;
+`--target-style` selects the entries for the style being emitted/checked
+(an entry matches when its `targets` name that style or the generic
+`latex`, which keeps meaning "every LaTeX style" for single-style
+sources). Both validation and emission run on the target-filtered
+document (`filter_doc`), so profile strictness and `id` uniqueness apply
+per style — the same `id` may appear once per style. The `targets` tokens
+themselves are validated on the UNFILTERED document (`validate_targets`)
+so a typo'd style name fails `--check` loudly instead of silently
+dropping the entry. Web mode filters on `web` before validating, matching
+what the web emitter consumes.
+
+Per-style `meta`/`contact` deltas live in an optional top-level
+`overrides.<style>` block, deep-merged over the base for the selected
+`--target-style` (`apply_overrides`; only `meta` and `contact` may be
+overridden — sections are selected per entry via `targets`). A gitignored
+sibling `<source-stem>.local.yml` overlay (e.g. `data/cv.local.yml`) is
+deep-merged over the source by `load_cv` when present — the designated
+home for local-only PII fields, keeping the committed source clean. The
+`test/cv-merged.yml` fixture (+ its `cv-merged.local.yml` overlay)
+mechanically combines the two profile fixtures and must reproduce the
+existing plain/tagged/web goldens byte-for-byte, locking the guarantee
+that merging sources preserves every consumer's output.
+
 ### `meta.pdf_title` (shared core)
 
 `meta.pdf_title` is **optional and accepted under BOTH profiles** —
