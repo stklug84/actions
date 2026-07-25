@@ -1,0 +1,11 @@
+---
+# Gitignored-style LOCAL OVERLAY companion of cv-merged.yml (committed here
+# because it is a test fixture, not PII). cv/parse deep-merges any sibling
+# <stem>.local.yml over its source; this one contributes the `en` half of
+# the plain override's pdf_title, completing the bilingual mapping started
+# in cv-merged.yml.
+overrides:
+  cv-plain-style:
+    meta:
+      pdf_title:
+        en: Curriculum Vitae

@@ -58,6 +58,23 @@ inputs:
       \cvtechstack macros.
     required: false
     default: "plain"
+  target-style:
+    description: >-
+      Manifest style name (e.g. `cv-tagged-ia`) for merged multi-style
+      sources. Selects entries whose `targets` name this style (in
+      addition to the generic `latex` token) and applies the matching
+      per-style `overrides.<style>` meta/contact block. Empty (default)
+      keeps the single-style behaviour (`latex` token only).
+    required: false
+    default: ""
+  valid-targets:
+    description: >-
+      Comma-separated extra target tokens accepted in `targets` lists
+      (typically every manifest style name, e.g.
+      `cv-plain-style,cv-tagged-ia`). Empty (default) allows only
+      `latex` and `web`.
+    required: false
+    default: ""
   lang:
     description: Language — `de` or `en` (latex mode; web is always en).
     required: false
@@ -87,6 +104,8 @@ runs:
         SOURCE: ${{ inputs.source }}
         MODE: ${{ inputs.mode }}
         STYLE: ${{ inputs.style }}
+        TARGET_STYLE: ${{ inputs.target-style }}
+        VALID_TARGETS: ${{ inputs.valid-targets }}
         CV_LANG: ${{ inputs.lang }}
         OUT_DIR: ${{ inputs.out-dir }}
         CHECK: ${{ inputs.check }}
