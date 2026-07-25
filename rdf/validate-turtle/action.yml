@@ -47,20 +47,30 @@ runs:
         java-version: ${{ inputs.java-version }}
 
     # Jena is fetched over HTTPS from Maven Central. No integrity check
-    # is enforced; rely on TLS for transport security.
+    # is enforced; rely on TLS for transport security. The version input
+    # is validated against a strict X.Y.Z pattern and the archive is
+    # unpacked into a FIXED directory ($RUNNER_TEMP/apache-jena), so the
+    # path appended to GITHUB_PATH never contains user-controlled data
+    # (CodeQL: actions/envpath-injection).
     - name: Install Apache Jena
       shell: bash
       env:
         JENA_VERSION: ${{ inputs.jena-version }}
       run: |
         set -euo pipefail
+        if ! [[ "$JENA_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::jena-version must match X.Y.Z, got: $JENA_VERSION" >&2
+          exit 1
+        fi
         BASE="https://repo1.maven.org/maven2/org/apache/jena/apache-jena"
         URL="$BASE/${JENA_VERSION}/apache-jena-${JENA_VERSION}.tar.gz"
         curl -fsSL -o "$RUNNER_TEMP/apache-jena.tar.gz" "$URL"
-        tar -xzf "$RUNNER_TEMP/apache-jena.tar.gz" -C "$RUNNER_TEMP"
+        mkdir -p "$RUNNER_TEMP/apache-jena"
+        tar -xzf "$RUNNER_TEMP/apache-jena.tar.gz" \
+          -C "$RUNNER_TEMP/apache-jena" --strip-components=1
         rm -f "$RUNNER_TEMP/apache-jena.tar.gz"
-        echo "$RUNNER_TEMP/apache-jena-${JENA_VERSION}/bin" >> "$GITHUB_PATH"
-        "$RUNNER_TEMP/apache-jena-${JENA_VERSION}/bin/riot" --version
+        echo "$RUNNER_TEMP/apache-jena/bin" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/apache-jena/bin/riot" --version
 
     - name: Validate Turtle files
       shell: bash
