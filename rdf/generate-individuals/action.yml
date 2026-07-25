@@ -1,0 +1,184 @@
+---
+# Composite action: run a repository-local RDF instance-graph generator.
+#
+# Sets up Python, installs rdflib (PEP 440 specifier, range or exact),
+# restores a cached API response directory (actions/cache keyed on the
+# generator's input data), and drives a fetch -> generate -> emit
+# pipeline implemented by a Python script in the calling repository
+# (e.g. scripts/generate_individuals.py in stklug84/magic-cards, which
+# resolves a card inventory against the Scryfall API and emits Turtle
+# instance files). Optional prepare/finalize commands bracket the
+# pipeline for repo-specific extract and post-processing steps.
+#
+# The three pipeline stages map to generator subcommands:
+#   fetch      - resolve source rows against the remote API (cached)
+#   generate   - emit the per-set instance files
+#   collection - emit the inventory instance graph
+#
+# Requires the repository to be checked out first (actions/checkout).
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - uses: stklug84/actions/rdf/generate-individuals@v2
+#     with:
+#       generator: scripts/generate_individuals.py  # optional
+#       prepare-command: python3 scripts/build_vocab.py
+#       finalize-command: python3 scripts/update_imports.py
+name: Generate RDF card individuals
+description: >-
+  Run a repository-local RDF instance-graph generation pipeline
+  (fetch / generate / collection) with pinned Python + rdflib and a
+  cached API response directory.
+
+inputs:
+  generator:
+    description: >-
+      Path to the generator script, invoked as
+      `python3 <generator> <stage>`.
+    required: false
+    default: "scripts/generate_individuals.py"
+  prepare-command:
+    description: >-
+      Optional shell command run before the fetch stage (e.g. build
+      vocabulary extracts from the ontology). Empty skips the step.
+    required: false
+    default: ""
+  finalize-command:
+    description: >-
+      Optional shell command run after the collection stage (e.g.
+      rewrite the aggregator's owl:imports block). Empty skips the
+      step.
+    required: false
+    default: ""
+  python-version:
+    description: Python version for actions/setup-python.
+    required: false
+    default: "3.12"
+  rdflib-version:
+    description: >-
+      PEP 440 version specifier appended to "rdflib" for pip (exact
+      pin like "==7.1.4" or a range like ">=7,<8"). Empty skips the
+      install (for generators and prepare/finalize commands that are
+      stdlib-only).
+    required: false
+    default: ">=7,<8"
+  cache-dir:
+    description: >-
+      Directory holding the generator's remote API response cache,
+      saved and restored with actions/cache.
+    required: false
+    default: "/tmp/scryfall_cache"
+  cache-key:
+    description: Cache key prefix for the API response cache.
+    required: false
+    default: "scryfall-cache"
+  cache-hash-files:
+    description: >-
+      File pattern(s) hashed into the cache key (hashFiles syntax);
+      typically the generator's source inventory.
+    required: false
+    default: "collection.csv"
+  run-fetch:
+    description: Run the fetch stage (true/false).
+    required: false
+    default: "true"
+  run-generate:
+    description: Run the generate stage (true/false).
+    required: false
+    default: "true"
+  run-collection:
+    description: Run the collection stage (true/false).
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install rdflib
+      shell: bash
+      env:
+        RDFLIB_VERSION: ${{ inputs.rdflib-version }}
+      run: |
+        set -euo pipefail
+        if [ -z "$RDFLIB_VERSION" ]; then
+          echo "rdflib-version empty; skipping install."
+          exit 0
+        fi
+        pip install --user "rdflib${RDFLIB_VERSION}"
+        python3 -c 'import rdflib; print(f"rdflib {rdflib.__version__}")'
+
+    - name: Restore API response cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.cache-dir }}
+        key: ${{ inputs.cache-key }}-${{ hashFiles(inputs.cache-hash-files) }}
+        restore-keys: |
+          ${{ inputs.cache-key }}-
+
+    - name: Prepare
+      shell: bash
+      env:
+        PREPARE_COMMAND: ${{ inputs.prepare-command }}
+      run: |
+        set -euo pipefail
+        if [ -z "$PREPARE_COMMAND" ]; then
+          echo "prepare-command empty; skipping."
+          exit 0
+        fi
+        eval "$PREPARE_COMMAND"
+
+    - name: Fetch (resolve printings via the remote API)
+      shell: bash
+      env:
+        GENERATOR: ${{ inputs.generator }}
+        RUN_FETCH: ${{ inputs.run-fetch }}
+      run: |
+        set -euo pipefail
+        if [ "$RUN_FETCH" != "true" ]; then
+          echo "run-fetch=false; skipping fetch stage."
+          exit 0
+        fi
+        python3 "$GENERATOR" fetch
+
+    - name: Generate (emit per-set instance files)
+      shell: bash
+      env:
+        GENERATOR: ${{ inputs.generator }}
+        RUN_GENERATE: ${{ inputs.run-generate }}
+      run: |
+        set -euo pipefail
+        if [ "$RUN_GENERATE" != "true" ]; then
+          echo "run-generate=false; skipping generate stage."
+          exit 0
+        fi
+        python3 "$GENERATOR" generate
+
+    - name: Collection (emit the inventory instance graph)
+      shell: bash
+      env:
+        GENERATOR: ${{ inputs.generator }}
+        RUN_COLLECTION: ${{ inputs.run-collection }}
+      run: |
+        set -euo pipefail
+        if [ "$RUN_COLLECTION" != "true" ]; then
+          echo "run-collection=false; skipping collection stage."
+          exit 0
+        fi
+        python3 "$GENERATOR" collection
+
+    - name: Finalize
+      shell: bash
+      env:
+        FINALIZE_COMMAND: ${{ inputs.finalize-command }}
+      run: |
+        set -euo pipefail
+        if [ -z "$FINALIZE_COMMAND" ]; then
+          echo "finalize-command empty; skipping."
+          exit 0
+        fi
+        eval "$FINALIZE_COMMAND"
