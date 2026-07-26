@@ -9,7 +9,11 @@
 #	`robot reason` for the rdf/reason-owl composite action. Driven by
 #	environment variables: FILES (space-separated ontology files,
 #	each reasoned independently), REASONER (hermit | elk | whelk |
-#	jfact | structural), and ROBOT_JAR (path to the robot.jar).
+#	jfact | structural), ROBOT_JAR (path to the robot.jar), and the
+#	optional CATALOG (OASIS XML catalog passed to `robot --catalog`
+#	so owl:imports with non-dereferenceable IRIs — e.g. urn: — are
+#	resolved to local files; relative paths inside the catalog are
+#	resolved against the catalog's own location).
 #	`robot reason` exits nonzero on logical inconsistency and on
 #	unsatisfiable classes, so a passing file is both consistent and
 #	coherent. The reasoned output is written to a throwaway temp
@@ -20,7 +24,7 @@
 #	failure) and exits nonzero when any file fails or is missing.
 # @arguments:
 #	none (configured via environment variables, see @description)
-## Usage: FILES="<file> [<file> ...]" [REASONER=hermit] ROBOT_JAR=<path> scripts/reason.sh
+## Usage: FILES="<file> [<file> ...]" [REASONER=hermit] [CATALOG=<catalog.xml>] ROBOT_JAR=<path> scripts/reason.sh
 ### Example: FILES="ontology/core.owl" REASONER=elk ROBOT_JAR=/tmp/robot.jar scripts/reason.sh
 
 set -euo pipefail
@@ -28,6 +32,7 @@ set -euo pipefail
 FILES="${FILES:?FILES is required (space-separated ontology files)}"
 REASONER="${REASONER:-hermit}"
 ROBOT_JAR="${ROBOT_JAR:?ROBOT_JAR is required (path to robot.jar)}"
+CATALOG="${CATALOG:-}"
 
 err() { echo "::error::$*" >&2; }
 
@@ -47,6 +52,15 @@ hermit | elk | whelk | jfact | structural) ;;
 	exit 1
 	;;
 esac
+
+CATALOG_ARGS=()
+if [ -n "$CATALOG" ]; then
+	if [ ! -f "$CATALOG" ]; then
+		err "catalog not found at $CATALOG."
+		exit 1
+	fi
+	CATALOG_ARGS=(--catalog "$CATALOG")
+fi
 
 read -ra FILE_LIST <<<"$FILES"
 if [ "${#FILE_LIST[@]}" -eq 0 ]; then
@@ -69,7 +83,7 @@ for file in "${FILE_LIST[@]}"; do
 		FAILURES=$((FAILURES + 1))
 		continue
 	fi
-	if OUTPUT="$(java -jar "$ROBOT_JAR" reason \
+	if OUTPUT="$(java -jar "$ROBOT_JAR" reason "${CATALOG_ARGS[@]}" \
 		--reasoner "$REASONER" --input "$file" --output "$TMP_OUT" 2>&1)"; then
 		echo "OK   $file"
 	else

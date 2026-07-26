@@ -481,13 +481,15 @@ the repository to be checked out first (`actions/checkout`).
 - uses: stklug84/actions/rdf/reason-owl@v2
   with:
     files: "ontology/core.owl ontology/ext.owl"
-    reasoner: hermit   # optional
+    reasoner: hermit               # optional
+    catalog: catalog-v001.xml      # optional import mapping
 ```
 
 | Input           | Default    | Description                                                      |
 |-----------------|------------|-------------------------------------------------------------------|
 | `files`         | —          | Space-separated ontology files to reason over. Required.         |
 | `reasoner`      | `"hermit"` | `hermit`, `elk`, `whelk`, `jfact`, or `structural`.              |
+| `catalog`       | `""`       | Optional OASIS XML catalog for `robot --catalog`, mapping `owl:imports` IRIs (e.g. `urn:`) to local files. Empty disables the flag. |
 | `robot-version` | `"1.9.8"`  | ROBOT release to install (pinned `robot.jar`).                   |
 | `java-version`  | `"21"`     | JDK version for `actions/setup-java`.                            |
 
