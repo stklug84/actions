@@ -15,7 +15,8 @@
 #   - uses: stklug84/actions/rdf/reason-owl@v2
 #     with:
 #       files: "ontology/core.owl ontology/ext.owl"
-#       reasoner: hermit   # optional
+#       reasoner: hermit               # optional
+#       catalog: catalog-v001.xml      # optional import mapping
 name: Reason over OWL with ROBOT
 description: >-
   Check OWL ontologies for logical consistency and coherence
@@ -33,6 +34,15 @@ inputs:
       jfact, or structural.
     required: false
     default: "hermit"
+  catalog:
+    description: >-
+      Optional XML catalog (OASIS) mapping ontology IRIs to local
+      files, passed to `robot --catalog`. Required when the inputs
+      resolve their owl:imports via non-dereferenceable IRIs (e.g.
+      urn:). Relative file paths inside the catalog are resolved
+      against the catalog's location. Empty disables the flag.
+    required: false
+    default: ""
   robot-version:
     description: ROBOT release to install (pinned robot.jar).
     required: false
@@ -71,6 +81,7 @@ runs:
       env:
         FILES: ${{ inputs.files }}
         REASONER: ${{ inputs.reasoner }}
+        CATALOG: ${{ inputs.catalog }}
       run: |
         set -euo pipefail
         ROBOT_JAR="$RUNNER_TEMP/robot.jar" "$GITHUB_ACTION_PATH/scripts/reason.sh"
