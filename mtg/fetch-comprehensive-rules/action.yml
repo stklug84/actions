@@ -1,0 +1,102 @@
+---
+# Composite action: fetch the Magic: The Gathering Comprehensive Rules
+# text from Wizards of the Coast.
+#
+# The CR text is NOT redistributable, so it can never be committed —
+# every consumer has to fetch it at run time. This action single-sources
+# the edition date and the URL shape that were previously duplicated in
+# four workflow steps across two repositories, and caches the download
+# so a re-run does not hit Wizards' CDN again.
+#
+# The file is written as `MagicCompRules-<cr-date>.txt` inside `dest`,
+# which is the name the rules engine discovers.
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - uses: stklug84/actions/mtg/fetch-comprehensive-rules@v2
+#     with:
+#       cr-date: "20260619"
+#       dest: "."          # optional; directory to write into
+name: Fetch Magic Comprehensive Rules
+description: >-
+  Download a pinned edition of the Magic: The Gathering Comprehensive
+  Rules text (not redistributable, so never committed), with caching.
+
+inputs:
+  cr-date:
+    description: >-
+      Comprehensive Rules edition, as the YYYYMMDD date Wizards publishes
+      it under. Determines both the URL and the output file name.
+    required: true
+  dest:
+    description: >-
+      Directory the rules text is written into. Created when missing.
+    required: false
+    default: "."
+  cache:
+    description: >-
+      Restore/save the download through actions/cache ('true'/'false').
+      The edition is immutable, so a cache hit is always valid.
+    required: false
+    default: "true"
+
+outputs:
+  path:
+    description: Path of the downloaded rules text.
+    value: ${{ steps.resolve.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    # The date is validated before it reaches a URL or a file path, so
+    # neither can carry user-controlled path segments
+    # (CodeQL: actions/envpath-injection).
+    - name: Resolve and validate the target path
+      id: resolve
+      shell: bash
+      env:
+        CR_DATE: ${{ inputs.cr-date }}
+        DEST: ${{ inputs.dest }}
+      run: |
+        set -euo pipefail
+        if ! [[ "$CR_DATE" =~ ^[0-9]{8}$ ]]; then
+          echo "::error::cr-date must be an 8-digit YYYYMMDD date, got: $CR_DATE" >&2
+          exit 1
+        fi
+        mkdir -p "$DEST"
+        printf 'path=%s\n' "${DEST%/}/MagicCompRules-${CR_DATE}.txt" >> "$GITHUB_OUTPUT"
+        printf 'year=%s\n' "${CR_DATE:0:4}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the cached rules text
+      id: cache
+      if: ${{ inputs.cache == 'true' }}
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      with:
+        path: ${{ steps.resolve.outputs.path }}
+        key: mtg-comprehensive-rules-${{ inputs.cr-date }}
+
+    # Fetched over HTTPS from Wizards' CDN; no integrity check is
+    # enforced (they publish no checksum), so this relies on TLS.
+    - name: Download the Comprehensive Rules
+      if: ${{ inputs.cache != 'true' || steps.cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      env:
+        CR_DATE: ${{ inputs.cr-date }}
+        CR_YEAR: ${{ steps.resolve.outputs.year }}
+        TARGET: ${{ steps.resolve.outputs.path }}
+      run: |
+        set -euo pipefail
+        BASE="https://media.wizards.com/${CR_YEAR}/downloads"
+        curl -fsSL -o "$TARGET" "${BASE}/MagicCompRules%20${CR_DATE}.txt"
+
+    - name: Report
+      shell: bash
+      env:
+        TARGET: ${{ steps.resolve.outputs.path }}
+      run: |
+        set -euo pipefail
+        if [ ! -s "$TARGET" ]; then
+          echo "::error::$TARGET is missing or empty" >&2
+          exit 1
+        fi
+        printf 'Comprehensive Rules: %s (%s bytes)\n' "$TARGET" "$(wc -c < "$TARGET" | tr -d ' ')"

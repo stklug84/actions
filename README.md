@@ -526,6 +526,36 @@ post-processing steps. Requires the repository to be checked out first
 | `run-generate`     | `"true"`                               | Run the `generate` stage.                            |
 | `run-collection`   | `"true"`                               | Run the `collection` stage.                          |
 
+## `mtg/fetch-comprehensive-rules`
+
+Download a pinned edition of the Magic: The Gathering Comprehensive Rules
+text from Wizards of the Coast. The text is **not redistributable**, so it
+can never be committed — every consumer has to fetch it at run time. This
+action single-sources the edition date and the URL shape, and caches the
+download (the edition is immutable, so a cache hit is always valid).
+
+The file is written as `MagicCompRules-<cr-date>.txt` inside `dest`, which
+is the name the rules engine discovers. The URL year is derived from
+`cr-date`, so only one value ever needs updating.
+
+```yaml
+- uses: actions/checkout@v7
+- uses: stklug84/actions/mtg/fetch-comprehensive-rules@v2
+  with:
+    cr-date: "20260619"
+    dest: "."          # optional; directory to write into
+```
+
+| Input     | Default  | Description                                                          |
+|-----------|----------|-----------------------------------------------------------------------|
+| `cr-date` | —        | Edition, as the `YYYYMMDD` date Wizards publishes under. Required.   |
+| `dest`    | `"."`    | Directory the text is written into; created when missing.            |
+| `cache`   | `"true"` | Restore/save the download via `actions/cache`.                       |
+
+| Output | Description                        |
+|--------|------------------------------------|
+| `path` | Path of the downloaded rules text. |
+
 ## Linting
 
 Pull requests against `main` run the `Lint` workflow
