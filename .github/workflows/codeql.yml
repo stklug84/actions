@@ -34,31 +34,15 @@ permissions:
   contents: read
 
 jobs:
-  analyze:
-    name: Analyze (${{ matrix.language }})
-    runs-on: ubuntu-latest
+  # A reusable-workflow path plus a 40-character SHA cannot fit in 120
+  # columns; the trailing version comment stays because that is the form
+  # Dependabot reads and rewrites.
+  # yamllint disable-line rule:line-length
+  codeql:
+    uses: stklug84/github-workflows/.github/workflows/repo-codeql.yml@e8b7009127c21bd66249ad5df0a0112c1d4f6553  # v4.0.0
     permissions:
       security-events: write
       contents: read
       actions: read
-    strategy:
-      fail-fast: false
-      matrix:
-        language:
-          - actions
-          - python
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
-        with:
-          languages: ${{ matrix.language }}
-          build-mode: none
-          queries: security-extended
-
-      - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
-        with:
-          category: /language:${{ matrix.language }}
+    with:
+      languages: '["actions", "python"]'
