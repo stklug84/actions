@@ -1,0 +1,78 @@
+---
+# Composite action: resolve the pinned reveal.js toolchain images from a
+# pin-only, multi-stage Dockerfile.
+#
+# The slide toolchain runs three upstream images via `docker run`:
+# pandoc (Markdown -> reveal.js), mermaid-cli (diagrams -> SVG) and
+# DeckTape (HTML -> PDF). Their digest pins live in ONE Dockerfile in the
+# consuming repository, one named stage per tool:
+#
+#   FROM pandoc/core:3.11.0.0-alpine@sha256:...           AS pandoc
+#   FROM minlag/mermaid-cli:11.17.0@sha256:...            AS mermaid
+#   FROM ghcr.io/astefanutti/decktape:3.16.1@sha256:...   AS decktape
+#
+# The file is never built: this action only extracts each stage's FROM
+# reference, so Dependabot's docker ecosystem keeps all three digests
+# current and hadolint lints a single file (same mechanism as the TeX
+# Live pin consumed by latex-build-cv). The resolver is strict: every
+# required stage must appear exactly once, every reference must be
+# digest-pinned (`@sha256:<64 hex>`), and no instruction other than
+# FROM (plus comments) is allowed.
+#
+# Requires the repository to be checked out first (actions/checkout).
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - id: images
+#     uses: stklug84/actions/revealjs/resolve-images@v2
+#     with:
+#       dockerfile: .github/docker/revealjs/Dockerfile
+#   - uses: stklug84/actions/revealjs/build-html@v2
+#     with:
+#       pandoc-image: ${{ steps.images.outputs.pandoc-image }}
+#       mermaid-image: ${{ steps.images.outputs.mermaid-image }}
+name: Resolve reveal.js toolchain images
+description: >-
+  Extract the digest-pinned pandoc, mermaid-cli and DeckTape image
+  references from a pin-only multi-stage Dockerfile (one named stage per
+  tool), failing on missing, duplicated or unpinned stages.
+
+inputs:
+  dockerfile:
+    description: >-
+      Path (in the workspace) to the pin-only multi-stage Dockerfile.
+    required: false
+    default: ".github/docker/revealjs/Dockerfile"
+  stages:
+    description: >-
+      Space-separated stage names that must be present. Each maps to the
+      output `<stage>-image`; only pandoc, mermaid and decktape are
+      exposed as outputs.
+    required: false
+    default: "pandoc mermaid decktape"
+
+outputs:
+  pandoc-image:
+    description: Digest-pinned pandoc image reference (stage `pandoc`).
+    value: ${{ steps.resolve.outputs.pandoc-image }}
+  mermaid-image:
+    description: Digest-pinned mermaid-cli image reference (stage `mermaid`).
+    value: ${{ steps.resolve.outputs.mermaid-image }}
+  decktape-image:
+    description: Digest-pinned DeckTape image reference (stage `decktape`).
+    value: ${{ steps.resolve.outputs.decktape-image }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve toolchain images
+      id: resolve
+      shell: bash
+      env:
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        STAGES: ${{ inputs.stages }}
+      run: |
+        set -euo pipefail
+        "$GITHUB_ACTION_PATH/scripts/resolve.sh" "$DOCKERFILE" "$STAGES" >> "$GITHUB_OUTPUT"
+        echo "Resolved toolchain images from $DOCKERFILE:"
+        grep -E '^[a-z]+-image=' "$GITHUB_OUTPUT" | tail -n 3

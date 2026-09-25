@@ -1,0 +1,67 @@
+{
+  "author": "Steffen Klug",
+  "build_dir": "test/.scratch/build/showcase",
+  "css": [
+    "test/themes/testtheme/theme.css"
+  ],
+  "deck_dir": "test/decks/showcase",
+  "engine_dir": "test/.scratch/build/showcase/engine",
+  "fonts": [
+    {
+      "family": "Test Sans",
+      "file": "test/.scratch/build/showcase/fonts/Test-Regular.woff2",
+      "style": "normal",
+      "weight": 400
+    }
+  ],
+  "footer": "Deck footer <b>overrides</b> the theme",
+  "height": 720,
+  "highlight": "kate",
+  "logo": "test/themes/testtheme/logo.svg",
+  "math": "katex",
+  "mermaid": {
+    "flowchart": {
+      "htmlLabels": false
+    },
+    "htmlLabels": false,
+    "theme": "base",
+    "themeVariables": {
+      "fontFamily": "Test Sans, Helvetica, Arial, sans-serif",
+      "fontSize": "16px",
+      "lineColor": "#703873",
+      "primaryBorderColor": "#703873",
+      "primaryColor": "#F1EAF8"
+    }
+  },
+  "mermaid_salt": "1dc9695f548768598908ccd8f7b856b50266c3be3f2f66bd1a92c2622dd5d6e2",
+  "name": "showcase",
+  "out_html": "test/.scratch/dist/showcase.html",
+  "pdf": {
+    "fragments": false,
+    "height": 720,
+    "load_pause": 1500,
+    "pause": 300,
+    "width": 1280
+  },
+  "reveal": {
+    "center": false,
+    "controls": false,
+    "hash": true,
+    "height": 720,
+    "margin": 0.06,
+    "navigationMode": "linear",
+    "pdfSeparateFragments": false,
+    "progress": true,
+    "showSlideNumber": "all",
+    "slideNumber": "c/t",
+    "transition": "fade",
+    "width": 1280
+  },
+  "slide_level": null,
+  "source": "test/decks/showcase/slides.md",
+  "theme": "testtheme",
+  "theme_base": "white",
+  "title": "Fixture Deck",
+  "vendor_dir": "test/.scratch/build/showcase/vendor",
+  "width": 1280
+}

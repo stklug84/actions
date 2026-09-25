@@ -1,0 +1,152 @@
+---
+# Composite action: build a Markdown slide deck into a self-contained
+# reveal.js HTML file.
+#
+# One Markdown file per deck; its YAML front matter picks the theme and
+# the deck parameters (size, transition, slide numbers, logo, footer,
+# math, Mermaid palette, PDF options, raw reveal.js options). The slide
+# structure comes from the Markdown itself (pandoc's heading -> slide
+# mapping with an explicit slide level): `#` = section divider opening a
+# vertical stack, `##` = slide, `###` = heading inside a slide, `---` =
+# extra slide, `::: notes`, `:::: columns`, `::: incremental`, `. . .`,
+# heading attributes for per-slide classes/backgrounds, GitHub alerts
+# (`> [!NOTE]`) as callouts, ```mermaid blocks rendered to SVG at build
+# time, math via vendored KaTeX, code highlighted by pandoc.
+#
+# Toolchain: pandoc 3.x and mermaid-cli run from digest-pinned container
+# images passed in as inputs (resolve them from a pin-only Dockerfile with
+# revealjs/resolve-images); reveal.js and KaTeX are vendored from this
+# action's package-lock.json (npm ci --ignore-scripts). All containers run
+# with --network none, so the resulting HTML is guaranteed self-contained.
+#
+# With check: 'true' the action only validates the front matter and the
+# theme (no docker, no npm) and writes nothing — the lint-time contract
+# check, mirroring cv/parse's check mode.
+#
+# Requires the repository to be checked out first (actions/checkout) and,
+# unless check mode, docker + node/npm on PATH (both preinstalled on
+# ubuntu-latest and available under gh act with the medium runner image).
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - id: images
+#     uses: stklug84/actions/revealjs/resolve-images@v2
+#   - id: html
+#     uses: stklug84/actions/revealjs/build-html@v2
+#     with:
+#       source: decks/showcase/slides.md
+#       name: showcase
+#       pandoc-image: ${{ steps.images.outputs.pandoc-image }}
+#       mermaid-image: ${{ steps.images.outputs.mermaid-image }}
+#
+# Usage (check only):
+#   - uses: stklug84/actions/revealjs/build-html@v2
+#     with:
+#       source: decks/showcase/slides.md
+#       name: showcase
+#       check: "true"
+name: Build reveal.js deck (HTML)
+description: >-
+  Turn one Markdown file (YAML front matter selects the theme and
+  parameters; headings define the slides) into a self-contained
+  reveal.js HTML deck with pandoc, build-time Mermaid SVGs and vendored
+  KaTeX, or validate its front matter and theme in check mode.
+
+inputs:
+  source:
+    description: Path to the deck's Markdown file (relative to the workspace).
+    required: true
+  name:
+    description: >-
+      Deck name; becomes the output basename (<out-dir>/<name>.html) and
+      the build directory (<build-root>/<name>). Use [A-Za-z0-9._-].
+    required: true
+  out-dir:
+    description: Directory the HTML deck is written into.
+    required: false
+    default: "dist"
+  build-root:
+    description: Root of the per-deck build directories (intermediates, logs).
+    required: false
+    default: "build"
+  themes-dir:
+    description: >-
+      Directory holding the consumer's themes (<themes-dir>/<name>/theme.yml).
+      A `theme:` that is not a directory here must be a built-in reveal.js
+      theme name.
+    required: false
+    default: "themes"
+  pandoc-image:
+    description: >-
+      Digest-pinned pandoc container image (e.g. pandoc/core:3.11.0.0-alpine@sha256:...).
+      Required unless check is 'true'.
+    required: false
+    default: ""
+  mermaid-image:
+    description: >-
+      Digest-pinned mermaid-cli container image (minlag/mermaid-cli). Only
+      needed when the deck contains ```mermaid blocks; the build fails with
+      a clear message when it does and no image is given.
+    required: false
+    default: ""
+  check:
+    description: >-
+      When 'true', validate the deck's front matter and its theme (paths,
+      fonts, schema) and write nothing; exits nonzero with a pinpointed
+      message on the first violation. Needs neither docker nor npm.
+    required: false
+    default: "false"
+
+outputs:
+  html:
+    description: Path of the self-contained HTML deck.
+    value: ${{ steps.build.outputs.html }}
+  slides:
+    description: Number of slides (leaf sections) in the deck.
+    value: ${{ steps.build.outputs.slides }}
+  title:
+    description: Deck title from the front matter.
+    value: ${{ steps.build.outputs.title }}
+  author:
+    description: Deck author(s) from the front matter (comma-separated).
+    value: ${{ steps.build.outputs.author }}
+  theme:
+    description: Resolved theme name.
+    value: ${{ steps.build.outputs.theme }}
+  size:
+    description: Presentation size as <width>x<height> (px).
+    value: ${{ steps.build.outputs.size }}
+  pdf-size:
+    description: PDF export size as <width>x<height> (px), from `pdf.size` or the deck size.
+    value: ${{ steps.build.outputs.pdf-size }}
+  pdf-fragments:
+    description: Whether the PDF should get one page per fragment step ('true'/'false').
+    value: ${{ steps.build.outputs.pdf-fragments }}
+  pdf-pause:
+    description: Per-slide pause (ms) for the PDF export.
+    value: ${{ steps.build.outputs.pdf-pause }}
+  pdf-load-pause:
+    description: Initial load pause (ms) for the PDF export.
+    value: ${{ steps.build.outputs.pdf-load-pause }}
+  build-dir:
+    description: The deck's build directory (intermediates and logs/).
+    value: ${{ steps.build.outputs.build-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build deck HTML
+      id: build
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.source }}
+        NAME: ${{ inputs.name }}
+        OUT_DIR: ${{ inputs.out-dir }}
+        BUILD_ROOT: ${{ inputs.build-root }}
+        THEMES_DIR: ${{ inputs.themes-dir }}
+        PANDOC_IMAGE: ${{ inputs.pandoc-image }}
+        MERMAID_IMAGE: ${{ inputs.mermaid-image }}
+        CHECK: ${{ inputs.check }}
+      run: |
+        set -euo pipefail
+        "$GITHUB_ACTION_PATH/scripts/run.sh"

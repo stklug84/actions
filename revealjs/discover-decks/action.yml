@@ -1,0 +1,67 @@
+---
+# Composite action: discover Markdown slide decks and emit a build matrix.
+#
+# Scans `root` RECURSIVELY for files named `main` (default slides.md):
+# every directory that holds one is a deck. The deck `name` is the
+# directory path relative to `root` with '/' replaced by '-', so nested
+# layouts (decks/<client>/<talk>/) yield unique names while direct
+# children of `root` keep their basename. Emits a JSON
+# `{"include":[...]}` matrix for `strategy.matrix` via fromJson(); each
+# entry carries `name`, `dir` and `source` and feeds revealjs/build-html
+# directly. A root without decks yields an empty matrix (no failure).
+# The Markdown counterpart to texlive/discover-variants.
+#
+# Requires the repository to be checked out first (actions/checkout).
+#
+# Usage:
+#   - uses: actions/checkout@v7
+#   - id: scan
+#     uses: stklug84/actions/revealjs/discover-decks@v2
+#     with:
+#       root: decks
+#       main: slides.md
+name: Discover slide decks
+description: >-
+  Scan a root directory recursively for Markdown slide decks (one
+  <main> file per deck directory) and emit a JSON build matrix with
+  name, dir and source per deck.
+
+inputs:
+  root:
+    description: Directory scanned recursively for decks.
+    required: false
+    default: "decks"
+  main:
+    description: File name that marks a deck directory.
+    required: false
+    default: "slides.md"
+
+outputs:
+  matrix:
+    description: >-
+      JSON object of the form {"include":[...]} suitable for
+      `strategy.matrix` via fromJson(). Each entry carries name, dir and
+      source (the deck's Markdown file, relative to the workspace).
+    value: ${{ steps.scan.outputs.matrix }}
+  count:
+    description: Number of decks discovered.
+    value: ${{ steps.scan.outputs.count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Scan decks and build matrix
+      id: scan
+      shell: bash
+      env:
+        ROOT: ${{ inputs.root }}
+        MAIN: ${{ inputs.main }}
+      run: |
+        set -euo pipefail
+        matrix="$("$GITHUB_ACTION_PATH/scripts/scan.sh" "$ROOT" "$MAIN")"
+        count="$(jq '.include | length' <<< "$matrix")"
+        {
+          echo "matrix=$matrix"
+          echo "count=$count"
+        } >> "$GITHUB_OUTPUT"
+        echo "Discovered $count deck(s): $matrix"
