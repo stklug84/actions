@@ -41,7 +41,10 @@ images="$("$REVEALJS_DIR/resolve-images/scripts/resolve.sh" "$TEST_DIR/docker/Do
 PANDOC_IMAGE="$(sed -n 's/^pandoc-image=//p' <<< "$images")"
 MERMAID_IMAGE="$(sed -n 's/^mermaid-image=//p' <<< "$images")"
 DECKTAPE_IMAGE="$(sed -n 's/^decktape-image=//p' <<< "$images")"
-[ -n "$PANDOC_IMAGE" ] && [ -n "$MERMAID_IMAGE" ] && [ -n "$DECKTAPE_IMAGE" ] || { fail "could not resolve all images"; exit 1; }
+if [ -z "$PANDOC_IMAGE" ] || [ -z "$MERMAID_IMAGE" ] || [ -z "$DECKTAPE_IMAGE" ]; then
+  fail "could not resolve all images"
+  exit 1
+fi
 
 echo "test: resolve-images rejects an unpinned stage"
 printf 'FROM pandoc/core:3.11.0.0-alpine AS pandoc\n' > "$SCRATCH_REL/unpinned.Dockerfile"
