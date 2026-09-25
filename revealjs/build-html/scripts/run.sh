@@ -94,7 +94,9 @@ drun() {
 }
 
 mkdir -p "$BUILD_DIR" "$OUT_DIR"
-own "$BUILD_DIR" "$OUT_DIR"
+# Hand the build root (created above when missing) back too, not only the
+# per-deck directory below it.
+own "$BUILD_ROOT" "$OUT_DIR"
 
 # ---------------------------------------------------------------------
 # 1. plan
