@@ -556,6 +556,259 @@ is the name the rules engine discovers. The URL year is derived from
 |--------|------------------------------------|
 | `path` | Path of the downloaded rules text. |
 
+## `revealjs/resolve-images`
+
+Extract the digest-pinned **pandoc**, **mermaid-cli** and **DeckTape** image
+references from a pin-only, multi-stage Dockerfile — one named stage per
+tool, never built. The file exists so Dependabot's docker ecosystem keeps
+all three digests current and hadolint lints a single file (the same
+mechanism as the TeX Live pin consumed by `latex-build-cv`). The resolver
+is strict: every stage must appear exactly once, every reference must be
+digest-pinned, and only `FROM … AS …` lines (plus comments) are allowed.
+Requires the repository to be checked out first (`actions/checkout`).
+
+```dockerfile
+# .github/docker/revealjs/Dockerfile
+FROM pandoc/core:3.11.0.0-alpine@sha256:…          AS pandoc
+FROM minlag/mermaid-cli:11.17.0@sha256:…           AS mermaid
+FROM ghcr.io/astefanutti/decktape:3.16.1@sha256:…  AS decktape
+```
+
+```yaml
+- uses: actions/checkout@v7
+- id: images
+  uses: stklug84/actions/revealjs/resolve-images@v2
+  with:
+    dockerfile: .github/docker/revealjs/Dockerfile
+```
+
+| Input        | Default                              | Description                                        |
+|--------------|--------------------------------------|----------------------------------------------------|
+| `dockerfile` | `.github/docker/revealjs/Dockerfile` | Pin-only multi-stage Dockerfile in the workspace.  |
+| `stages`     | `pandoc mermaid decktape`            | Space-separated stage names that must be present.  |
+
+| Output           | Description                                       |
+|------------------|---------------------------------------------------|
+| `pandoc-image`   | Digest-pinned pandoc reference (stage `pandoc`).  |
+| `mermaid-image`  | Digest-pinned mermaid-cli reference (`mermaid`).  |
+| `decktape-image` | Digest-pinned DeckTape reference (`decktape`).    |
+
+## `revealjs/discover-decks`
+
+Scan a root directory recursively for Markdown slide decks — every
+directory holding a `slides.md` (configurable) is a deck — and emit a JSON
+`{"include":[...]}` matrix for `strategy.matrix` via `fromJson()`. The deck
+`name` is the directory path relative to `root` with `/` replaced by `-`
+(unique for nested layouts, basename for direct children), restricted to
+`[A-Za-z0-9._-]` because it becomes the artifact and output file name. An
+empty root yields an empty matrix. The Markdown counterpart to
+`texlive/discover-variants`. Requires a checked-out repository.
+
+```yaml
+- uses: actions/checkout@v7
+- id: scan
+  uses: stklug84/actions/revealjs/discover-decks@v2
+  with:
+    root: decks
+    main: slides.md
+```
+
+| Input  | Default     | Description                                   |
+|--------|-------------|-----------------------------------------------|
+| `root` | `decks`     | Directory scanned recursively for decks.      |
+| `main` | `slides.md` | File name that marks a deck directory.        |
+
+| Output   | Description                                                                 |
+|----------|-----------------------------------------------------------------------------|
+| `matrix` | `{"include":[...]}` JSON; entries carry `name`, `dir` and `source`.         |
+| `count`  | Number of decks discovered.                                                 |
+
+## `revealjs/build-html`
+
+Build **one Markdown file into a self-contained reveal.js HTML deck**. The
+deck's YAML front matter picks the theme and the parameters; the slide
+structure comes from the Markdown itself. Engine: pandoc 3.x
+(`-t revealjs`, explicit slide level) with an own reveal.js 6 template and
+two Lua filters; ```` ```mermaid ```` blocks are rendered to SVG at build
+time by mermaid-cli (theme fonts installed for measuring *and* embedded
+into the SVGs); math is rendered by vendored KaTeX; code is highlighted by
+pandoc. reveal.js and KaTeX come from this action's `package-lock.json`
+(`npm ci --ignore-scripts`), pandoc and mermaid-cli from digest-pinned
+images passed as inputs (see `revealjs/resolve-images`). Every container
+runs with `--network none`, so the HTML is guaranteed self-contained.
+With `check: "true"` only the front matter and the theme are validated
+(no docker, no npm) — the lint-time contract check. See
+`revealjs/build-html/DECISIONS.md` for the design.
+
+```yaml
+- uses: actions/checkout@v7
+- id: images
+  uses: stklug84/actions/revealjs/resolve-images@v2
+- id: html
+  uses: stklug84/actions/revealjs/build-html@v2
+  with:
+    source: decks/showcase/slides.md
+    name: showcase
+    pandoc-image: ${{ steps.images.outputs.pandoc-image }}
+    mermaid-image: ${{ steps.images.outputs.mermaid-image }}
+```
+
+| Input           | Default   | Description                                                                 |
+|-----------------|-----------|-----------------------------------------------------------------------------|
+| `source`        | —         | Deck Markdown file (workspace-relative). Required.                          |
+| `name`          | —         | Deck name → `<out-dir>/<name>.html`, `<build-root>/<name>/`. Required.      |
+| `out-dir`       | `dist`    | Output directory.                                                           |
+| `build-root`    | `build`   | Root of the per-deck build directories (intermediates, `logs/`).            |
+| `themes-dir`    | `themes`  | Consumer themes (`<themes-dir>/<name>/theme.yml`); else built-in themes.   |
+| `pandoc-image`  | `""`      | Digest-pinned pandoc image. Required unless `check`.                        |
+| `mermaid-image` | `""`      | Digest-pinned mermaid-cli image; required only when the deck has Mermaid.   |
+| `check`         | `"false"` | `true` → validate front matter + theme only, write nothing.                 |
+
+| Output           | Description                                                     |
+|------------------|-----------------------------------------------------------------|
+| `html`           | Path of the HTML deck.                                          |
+| `slides`         | Number of slides (leaf sections).                               |
+| `title`, `author`, `theme`, `size` | Deck metadata from the front matter / theme.  |
+| `pdf-size`, `pdf-fragments`, `pdf-pause`, `pdf-load-pause` | Inputs for `revealjs/build-pdf`. |
+| `build-dir`      | The deck's build directory.                                     |
+
+**Markdown → slides** (pandoc semantics with a fixed rule set):
+
+| Markdown | Result |
+|---|---|
+| YAML front matter (`title`, `subtitle`, `author`, `date`, …) | Title slide + deck settings |
+| `# Heading` | Section divider (`.divider`, theme `divider-background`), opens a vertical stack |
+| `## Heading` | A slide; `###` and deeper are headings inside the slide |
+| `---` | Forces a new slide without heading |
+| `::: notes` | Speaker notes; `:::: columns` / `::: {.column width="40%"}` columns |
+| `::: incremental`, `. . .`, `::: {.fragment}` | Step-by-step reveal |
+| `## Title {.compact background-color="#000"}` | Per-slide class / background |
+| ```` ```mermaid ```` | Diagram rendered to SVG at build time (`img.mermaid`) |
+| `$…$`, `$$…$$` | Math (KaTeX, MathML or none via `math:`) |
+| `> [!NOTE]` … | `callout callout-note` div (also `TIP`, `IMPORTANT`, `WARNING`, `CAUTION`) |
+
+Slide level: front-matter `slide-level`, else **2 when the deck has any
+`##`**, else 1 (pandoc's auto-detection is never used).
+
+**Front matter** (unknown keys are rejected; `reveal:` passes raw reveal.js
+options through):
+
+```yaml
+---
+title: My Deck                # required
+subtitle: …                   # optional: author (string or list), date, institute, lang, keywords
+theme: curveball              # themes/<name>/ or a built-in reveal.js theme (white, black, …)
+css: [extra.css]              # extra stylesheets, relative to the deck
+size: "16:9"                  # 16:9 | 4:3 | 16:10 | <w>x<h>
+slide-level: 2                # optional override
+slide-number: c/t             # reveal.js slideNumber (string or boolean)
+transition: fade              # none | fade | slide | convex | concave | zoom
+navigation: linear            # default | linear | grid
+center: false
+logo: images/logo.png         # or false; the theme may provide a default
+footer: "Plain text"          # or false
+math: katex                   # katex | mathml | none
+highlight: kate               # pandoc highlight style (default from the theme)
+mermaid: {themeVariables: {…}}  # merged over the theme's Mermaid config
+pdf: {size: "16:9", fragments: false, pause: 500, load-pause: 2000}
+reveal: {hash: true}          # raw reveal.js options, applied last
+title-slide: {class: title, background: "#FBF3D9"}
+---
+```
+
+**Themes** live in `<themes-dir>/<name>/` and declare themselves in
+`theme.yml`: `base` (built-in reveal.js theme layered underneath), `css`
+(default `theme.css`), `highlight`, `divider-background`, `title-slide`
+(`class`, `background`), `logo`, `footer`, `fonts` (list of
+`{file, family, weight, style}` — installed for Mermaid measuring and
+embedded into the SVGs), `reveal` (default options) and `mermaid` (mermaid
+config incl. `themeVariables`). Themes style the shared component classes
+`divider`, `callout`, `caveat`, `cards`/`card`, `kpis`/`kpi` (`num`,
+`label`), `lead`, `compact`, `kicker`, `deck-logo`, `deck-footer` so decks
+can switch themes by changing one line.
+
+## `revealjs/build-pdf`
+
+Export a self-contained reveal.js HTML deck to PDF with the digest-pinned
+**DeckTape** image (bundled Chromium, `--no-sandbox`, vector text with
+consolidated fonts; one page per slide, or per fragment step) and verify
+the result with pypdf: magic bytes, page count == slide count (when
+given), page size == deck size. Runs with `--network none` and reads the
+deck via `file://`. Pair with `revealjs/build-html`, whose outputs feed
+every input.
+
+```yaml
+- uses: stklug84/actions/revealjs/build-pdf@v2
+  with:
+    html: ${{ steps.html.outputs.html }}
+    decktape-image: ${{ steps.images.outputs.decktape-image }}
+    size: ${{ steps.html.outputs.pdf-size }}
+    fragments: ${{ steps.html.outputs.pdf-fragments }}
+    pause: ${{ steps.html.outputs.pdf-pause }}
+    load-pause: ${{ steps.html.outputs.pdf-load-pause }}
+    title: ${{ steps.html.outputs.title }}
+    author: ${{ steps.html.outputs.author }}
+    expected-pages: ${{ steps.html.outputs.slides }}
+```
+
+| Input            | Default    | Description                                                     |
+|------------------|------------|-----------------------------------------------------------------|
+| `html`           | —          | Workspace-relative HTML deck. Required.                         |
+| `pdf`            | `""`       | Output path. Empty → next to the HTML with `.pdf`.              |
+| `decktape-image` | —          | Digest-pinned DeckTape image. Required.                         |
+| `size`           | `1280x720` | Viewport/page size in px; must match the deck's size.           |
+| `fragments`      | `"false"`  | `true` → one page per fragment step.                            |
+| `pause`          | `500`      | Per-slide pause (ms).                                           |
+| `load-pause`     | `2000`     | Initial load pause (ms).                                        |
+| `title`, `author`| `""`       | PDF metadata.                                                   |
+| `expected-pages` | `0`        | Expected page count; `0` only requires ≥ 1 page.                |
+
+| Output  | Description                 |
+|---------|-----------------------------|
+| `pdf`   | Path of the exported PDF.   |
+| `pages` | Number of pages.            |
+
+## `release/publish-dated`
+
+Publish build artifacts as the dated, run-numbered release
+`v<YYYY.MM.DD>-r<run-number>` (title `<title-prefix> <date> (<short-sha>)`,
+notes with the commit subject and the asset list) and, with `keep > 0`,
+prune older releases of the same scheme together with their tags and
+sweep orphaned tags. Manually created releases or tags in other formats
+are never touched. Extracted from the `latex-build-cv` reusable workflow,
+with two fixes: a **re-run** reuses the release already tagged
+`-r<run-number>` (assets replaced with `--clobber`) instead of failing,
+and pruning is **fail-safe** — both the release and the tag inventory
+must succeed before anything is deleted, so a failed `gh release list`
+can never delete the tags of live releases. `dry-run: "true"` prints
+every mutation instead of executing it (no token needed), which lets
+pull-request builds exercise the release path. The calling job must grant
+`contents: write`.
+
+```yaml
+- uses: stklug84/actions/release/publish-dated@v2
+  with:
+    files: "dist/*.pdf"
+    title-prefix: "Slides"
+    list-heading: "Decks:"
+    keep: "10"
+    dry-run: ${{ github.event_name != 'push' }}
+```
+
+| Input          | Default               | Description                                                     |
+|----------------|-----------------------|-----------------------------------------------------------------|
+| `files`        | —                     | Whitespace/newline-separated glob list; each must match ≥ 1 non-empty file. Required. |
+| `title-prefix` | `Release`             | Title prefix → `<prefix> <YYYY-MM-DD> (<short-sha>)`.           |
+| `list-heading` | `Files:`              | Heading above the asset list in the notes.                      |
+| `keep`         | `0`                   | Keep the N newest matching releases; `0` disables pruning.      |
+| `token`        | `${{ github.token }}` | Token with `contents: write`.                                   |
+| `dry-run`      | `"false"`             | `true` → print mutations instead of executing them.             |
+
+| Output  | Description                        |
+|---------|------------------------------------|
+| `tag`   | The release tag (created/reused).  |
+| `title` | The release title.                 |
+
 ## Linting
 
 Pull requests against `main` run the `Lint` workflow
@@ -572,6 +825,15 @@ Pull requests against `main` run the `Lint` workflow
   check), and `bandit` (security; confirms `yaml.safe_load`) on the
   `cv/parse` Python emitter, plus its golden tests. Config:
   `cv/parse/pyproject.toml`.
+- **revealjs-python-lint** — the same trio via this repository's own
+  `python/*` actions on `revealjs/build-html` and `revealjs/build-pdf`,
+  plus the planner's golden tests (`revealjs/build-html/test/run-tests.sh`).
+- **release-tests** — `release/publish-dated` against a mocked `gh`
+  (`release/publish-dated/test/run-tests.sh`); asserts that a failed
+  inventory never deletes anything.
+- **revealjs-render** — docker integration test of the `revealjs/*`
+  actions on the fixture deck (`revealjs/test/run-tests.sh`), toolchain
+  digests pinned in `revealjs/test/docker/Dockerfile`.
 
 Run locally (requires `shellcheck`, `yq`, `yamllint`, `actionlint`, `npx`):
 

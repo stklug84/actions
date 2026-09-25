@@ -1,0 +1,35 @@
+# Tooling configuration for the revealjs/build-pdf composite action's
+# Python (the pypdf-based PDF verifier). Scoped to this directory; tools
+# are run from here:
+#   ruff check . && ruff format --check .
+#   mypy scripts/verify.py
+#   bandit -r scripts
+[project]
+name = "revealjs-build-pdf"
+version = "0.0.0"
+description = "Composite-action verifier: DeckTape PDF magic bytes, page count and page size."
+requires-python = ">=3.9"
+
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.9"
+files = ["scripts/verify.py"]
+strict = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+
+[tool.bandit]
+exclude_dirs = ["test"]

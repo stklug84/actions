@@ -1,0 +1,10 @@
+// markdownlint-cli2 options (the rules live in .markdownlint.yml).
+// Fixture decks of the revealjs actions deliberately violate the
+// single-title rule (every `#` is a section divider) and one of them has
+// no front matter at all; they are test data, not documentation.
+{
+  "ignores": [
+    "revealjs/build-html/test/decks/**",
+    "node_modules/**"
+  ]
+}

@@ -1,0 +1,28 @@
+---
+# Test theme fixture for the revealjs/build-html goldens and the docker
+# integration test. Exercises every theme.yml key.
+name: testtheme
+base: white
+css: theme.css
+highlight: kate
+divider-background: "#703873"
+title-slide:
+  class: title
+  background: "#FBF3D9"
+logo: logo.svg
+footer: "Fixture footer & co"
+fonts:
+  - file: fonts/Test-Regular.woff2
+    family: Test Sans
+    weight: 400
+    style: normal
+reveal:
+  transition: fade
+  center: false
+mermaid:
+  themeVariables:
+    fontFamily: "Test Sans, Helvetica, Arial, sans-serif"
+    fontSize: "16px"
+    primaryColor: "#F1EAF8"
+    primaryBorderColor: "#703873"
+    lineColor: "#703873"

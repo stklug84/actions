@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<!--
+  pandoc template for reveal.js 6 (stklug84/actions revealjs/build-html).
+
+  Differences from pandoc's stock default.revealjs:
+    * plugin paths follow the reveal.js 6 layout (dist/plugin/<name>.js);
+    * the whole Reveal.initialize() configuration arrives as ONE JSON blob in
+      the `reveal-config` variable (built and validated by prepare.py), so no
+      option is ever interpolated unquoted into JavaScript;
+    * the base reveal.js theme and the stylesheet list arrive as `deck-theme-base`
+      and `deck-css` (never `theme`/`css`, which the deck's own front matter
+      may define with a different meaning);
+    * optional persistent logo / footer overlays (`deck-logo`, `deck-footer`);
+    * no highlight.js / MathJax: code is highlighted by pandoc at build time,
+      math is rendered by the vendored KaTeX (`$math$`).
+-->
+<html$if(lang)$ lang="$lang$"$endif$$if(dir)$ dir="$dir$"$endif$>
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="pandoc">
+$for(author-meta)$
+  <meta name="author" content="$author-meta$">
+$endfor$
+$if(date-meta)$
+  <meta name="dcterms.date" content="$date-meta$">
+$endif$
+$if(keywords)$
+  <meta name="keywords" content="$for(keywords)$$keywords$$sep$, $endfor$">
+$endif$
+  <title>$if(title-prefix)$$title-prefix$ – $endif$$pagetitle$</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="$revealjs-url$/dist/reset.css">
+  <link rel="stylesheet" href="$revealjs-url$/dist/reveal.css">
+  <style>
+    .reveal .sourceCode {  /* see pandoc#7635 */
+      overflow: visible;
+    }
+    $styles.html()$
+    /* Persistent overlays (logo / footer); themes position them via CSS. */
+    .reveal .deck-logo { position: absolute; z-index: 30; pointer-events: none; }
+    .reveal .deck-footer { position: absolute; z-index: 30; pointer-events: none; }
+  </style>
+$if(deck-theme-base)$
+  <link rel="stylesheet" href="$revealjs-url$/dist/theme/$deck-theme-base$.css" id="theme">
+$else$
+  <link rel="stylesheet" href="$revealjs-url$/dist/theme/white.css" id="theme">
+$endif$
+$for(deck-css)$
+  <link rel="stylesheet" href="$deck-css$"/>
+$endfor$
+$if(math)$
+  $math$
+$endif$
+$for(header-includes)$
+  $header-includes$
+$endfor$
+</head>
+<body>
+$for(include-before)$
+$include-before$
+$endfor$
+  <div class="reveal">
+    <div class="slides">
+
+$if(title)$
+<section id="$idprefix$title-slide"$for(title-slide-attributes/pairs)$ $it.key$="$it.value/nowrap$"$endfor$>
+  <h1 class="title">$title$</h1>
+$if(subtitle)$
+  <p class="subtitle">$subtitle$</p>
+$endif$
+$for(author)$
+  <p class="author">$author$</p>
+$endfor$
+$for(institute)$
+  <p class="institute">$institute$</p>
+$endfor$
+$if(date)$
+  <p class="date">$date$</p>
+$endif$
+</section>
+$endif$
+
+$body$
+    </div>
+$if(deck-logo)$
+    <img class="deck-logo" src="$deck-logo$" alt="">
+$endif$
+$if(deck-footer)$
+    <div class="deck-footer">$deck-footer$</div>
+$endif$
+  </div>
+
+  <script src="$revealjs-url$/dist/reveal.js"></script>
+  <script src="$revealjs-url$/dist/plugin/notes.js"></script>
+  <script src="$revealjs-url$/dist/plugin/search.js"></script>
+  <script src="$revealjs-url$/dist/plugin/zoom.js"></script>
+  <script>
+    // Full list of configuration options: https://revealjs.com/config/
+    // The configuration is produced by prepare.py from the deck's YAML front
+    // matter (+ theme defaults); `<` is escaped as \u003c inside the JSON.
+    const deckConfig = $reveal-config$;
+    deckConfig.plugins = [RevealNotes, RevealSearch, RevealZoom];
+    Reveal.initialize(deckConfig);
+  </script>
+$for(include-after)$
+  $include-after$
+$endfor$
+  </body>
+</html>
