@@ -14,6 +14,13 @@
 # 	  - shellcheck   : bash run: blocks inside composite action.yml files
 # 	  - python-lint  : ruff (lint+format), mypy, bandit on cv/parse and
 # 	                   cv/generate (each with its own pyproject.toml)
+# 	  - revealjs-python-lint : ruff, mypy, bandit on revealjs/build-html and
+# 	                   revealjs/build-pdf via this repository's own
+# 	                   python/* composite actions, plus the planner goldens
+# 	  - release-tests : release/publish-dated against a mocked gh
+# 	  - revealjs-render : docker integration test of the revealjs/*
+# 	                   actions (pandoc, mermaid-cli, DeckTape; pinned in
+# 	                   revealjs/test/docker/Dockerfile)
 name: Lint
 
 on:
@@ -97,3 +104,86 @@ jobs:
         run: |
           set -euo pipefail
           bash cv/parse/test/run-tests.sh
+
+  # The revealjs planner/verifier are checked with the pinned python/*
+  # composite actions of this repository (ruff 0.16 / mypy 1.19 / bandit
+  # 1.8, each directory with its own pyproject.toml), followed by the
+  # pure-Python golden tests of the planner. No docker here.
+  revealjs-python-lint:
+    name: python-lint (revealjs/build-html, revealjs/build-pdf)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Ruff (revealjs/build-html)
+        uses: ./python/lint
+        with:
+          paths: revealjs/build-html
+          config: revealjs/build-html/pyproject.toml
+
+      - name: Ruff (revealjs/build-pdf)
+        uses: ./python/lint
+        with:
+          paths: revealjs/build-pdf
+          config: revealjs/build-pdf/pyproject.toml
+
+      - name: mypy (revealjs/build-html)
+        uses: ./python/typecheck
+        with:
+          paths: revealjs/build-html/scripts/prepare.py
+          config: revealjs/build-html/pyproject.toml
+          strict: "false"
+          extra-deps: "PyYAML==6.0.2 types-PyYAML==6.0.12.20241230"
+
+      - name: mypy (revealjs/build-pdf)
+        uses: ./python/typecheck
+        with:
+          paths: revealjs/build-pdf/scripts/verify.py
+          config: revealjs/build-pdf/pyproject.toml
+          strict: "false"
+          extra-deps: "pypdf==6.19.0"
+
+      - name: Bandit (revealjs)
+        uses: ./python/security
+        with:
+          paths: "revealjs/build-html/scripts revealjs/build-pdf/scripts"
+
+      - name: Run revealjs/build-html golden tests
+        run: |
+          set -euo pipefail
+          pip install --user PyYAML==6.0.2
+          bash revealjs/build-html/test/run-tests.sh
+
+  # release/publish-dated is exercised against a mocked `gh` placed first
+  # on PATH: no token, no network, no repository is touched. The suite
+  # asserts in particular that a failed inventory produces zero deletions.
+  release-tests:
+    name: release/publish-dated tests (mocked gh)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Run release/publish-dated tests
+        run: |
+          set -euo pipefail
+          bash release/publish-dated/test/run-tests.sh
+
+  # End-to-end: resolve-images -> discover-decks -> build-html (pandoc +
+  # mermaid-cli) -> build-pdf (DeckTape) on the fixture deck, with the
+  # toolchain digests pinned in revealjs/test/docker/Dockerfile. Needs
+  # docker (preinstalled on ubuntu-latest) and pulls the three images.
+  revealjs-render:
+    name: revealjs integration (docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Run revealjs integration tests
+        run: |
+          set -euo pipefail
+          pip install --user PyYAML==6.0.2 pypdf==6.19.0
+          bash revealjs/test/run-tests.sh

@@ -1,0 +1,104 @@
+---
+# Composite action: export a reveal.js HTML deck to PDF with DeckTape.
+#
+# Runs the digest-pinned DeckTape image (bundled Chromium, --no-sandbox,
+# vector text with consolidated fonts) against the self-contained HTML
+# produced by revealjs/build-html, one PDF page per slide (or per
+# fragment step with fragments: 'true'), then verifies the PDF with
+# pypdf: magic bytes, page count == slide count (when known) and page
+# size == deck size. The container runs with --network none and reads
+# the deck via file://, so the export is deterministic.
+#
+# Requires docker on PATH and a workspace-relative HTML path. Pair with
+# revealjs/build-html, whose outputs feed every input below.
+#
+# Usage:
+#   - id: html
+#     uses: stklug84/actions/revealjs/build-html@v2
+#     with: { source: decks/showcase/slides.md, name: showcase, ... }
+#   - uses: stklug84/actions/revealjs/build-pdf@v2
+#     with:
+#       html: ${{ steps.html.outputs.html }}
+#       decktape-image: ${{ steps.images.outputs.decktape-image }}
+#       size: ${{ steps.html.outputs.pdf-size }}
+#       fragments: ${{ steps.html.outputs.pdf-fragments }}
+#       pause: ${{ steps.html.outputs.pdf-pause }}
+#       load-pause: ${{ steps.html.outputs.pdf-load-pause }}
+#       title: ${{ steps.html.outputs.title }}
+#       author: ${{ steps.html.outputs.author }}
+#       expected-pages: ${{ steps.html.outputs.slides }}
+name: Build reveal.js deck (PDF)
+description: >-
+  Export a self-contained reveal.js HTML deck to PDF with the
+  digest-pinned DeckTape image and verify page count and page size.
+
+inputs:
+  html:
+    description: Workspace-relative path of the HTML deck.
+    required: true
+  pdf:
+    description: Output PDF path (workspace-relative). Empty → next to the HTML with .pdf.
+    required: false
+    default: ""
+  decktape-image:
+    description: Digest-pinned DeckTape container image (ghcr.io/astefanutti/decktape).
+    required: true
+  size:
+    description: Viewport/page size as <width>x<height> px; must match the deck's size.
+    required: false
+    default: "1280x720"
+  fragments:
+    description: "'true' → one PDF page per fragment step; 'false' → one page per slide."
+    required: false
+    default: "false"
+  pause:
+    description: Milliseconds DeckTape waits on every slide before capturing it.
+    required: false
+    default: "500"
+  load-pause:
+    description: Milliseconds DeckTape waits after loading the deck (fonts, KaTeX).
+    required: false
+    default: "2000"
+  title:
+    description: PDF metadata title. Empty → none.
+    required: false
+    default: ""
+  author:
+    description: PDF metadata author. Empty → none.
+    required: false
+    default: ""
+  expected-pages:
+    description: >-
+      Expected page count (the deck's slide count). '0' only requires at
+      least one page; with fragments: 'true' pass '0' (pages > slides).
+    required: false
+    default: "0"
+
+outputs:
+  pdf:
+    description: Path of the exported PDF.
+    value: ${{ steps.export.outputs.pdf }}
+  pages:
+    description: Number of pages in the PDF.
+    value: ${{ steps.export.outputs.pages }}
+
+runs:
+  using: composite
+  steps:
+    - name: Export PDF with DeckTape
+      id: export
+      shell: bash
+      env:
+        HTML: ${{ inputs.html }}
+        PDF: ${{ inputs.pdf }}
+        DECKTAPE_IMAGE: ${{ inputs.decktape-image }}
+        SIZE: ${{ inputs.size }}
+        FRAGMENTS: ${{ inputs.fragments }}
+        PAUSE: ${{ inputs.pause }}
+        LOAD_PAUSE: ${{ inputs.load-pause }}
+        PDF_TITLE: ${{ inputs.title }}
+        PDF_AUTHOR: ${{ inputs.author }}
+        EXPECTED_PAGES: ${{ inputs.expected-pages }}
+      run: |
+        set -euo pipefail
+        "$GITHUB_ACTION_PATH/scripts/run.sh"

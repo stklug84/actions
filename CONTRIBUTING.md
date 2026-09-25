@@ -2,7 +2,7 @@
 
 Thanks for taking the time to contribute! This repository hosts central,
 reusable **composite actions**, organized into subdirectories by domain
-(e.g. `ruby/`, `jekyll/`, `texlive/`).
+(e.g. `ruby/`, `jekyll/`, `texlive/`, `revealjs/`, `release/`).
 
 ## Workflow
 
@@ -22,9 +22,20 @@ Each composite action lives in its own directory:
 <domain>/<action-name>/scripts/   # optional standalone bash scripts
 ```
 
-Examples: `ruby/setup-ruby-bundler`, `texlive/detect`. New actions should
-follow this pattern and be documented in the [README](README.md) with a
-usage snippet plus input/output tables.
+Examples: `ruby/setup-ruby-bundler`, `texlive/detect`,
+`revealjs/build-html`. New actions should follow this pattern and be
+documented in the [README](README.md) with a usage snippet plus
+input/output tables.
+
+Actions with non-trivial Python keep it under `scripts/` next to a
+`pyproject.toml` (ruff/mypy/bandit configuration), a `DECISIONS.md`
+recording the design trade-offs, and golden tests under `test/` driven by
+`test/run-tests.sh` (see `cv/parse`, `revealjs/build-html`,
+`release/publish-dated`). Toolchains that run from container images take
+the digest-pinned image reference as an input; the pins live in the
+consumer (or, for this repository's own integration test, in
+`revealjs/test/docker/Dockerfile`) so Dependabot's docker ecosystem keeps
+them current.
 
 Larger bash logic may live in a `scripts/` directory next to the
 `action.yml`, invoked via `"$GITHUB_ACTION_PATH/scripts/<name>.sh"` (the
@@ -89,6 +100,18 @@ npx markdownlint-cli2 --config .markdownlint.yml '**/*.md'
 | shellcheck   | `.shellcheckrc`      | bash in composite actions and scripts  |
 | yamllint     | `.yamllint.yml`      | all YAML files                         |
 | markdownlint | `.markdownlint.yml`  | all Markdown files                     |
+| python       | per-action `pyproject.toml` | ruff, mypy, bandit + golden tests (`cv/*`, `revealjs/*`) |
+| release      | —                    | `release/publish-dated` against a mocked `gh` |
+| integration  | `revealjs/test/docker/Dockerfile` | `revealjs/*` end-to-end via docker (pandoc, mermaid-cli, DeckTape) |
+
+Run the action test suites locally with
+
+```bash
+bash cv/parse/test/run-tests.sh
+bash revealjs/build-html/test/run-tests.sh      # pure Python (PyYAML)
+bash release/publish-dated/test/run-tests.sh    # mocked gh
+bash revealjs/test/run-tests.sh                 # docker + node/npm + PyYAML + pypdf
+```
 
 ## Code scanning
 

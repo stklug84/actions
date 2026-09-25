@@ -1,0 +1,14 @@
+{
+  "flowchart": {
+    "htmlLabels": false
+  },
+  "htmlLabels": false,
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Test Sans, Helvetica, Arial, sans-serif",
+    "fontSize": "16px",
+    "lineColor": "#703873",
+    "primaryBorderColor": "#703873",
+    "primaryColor": "#F1EAF8"
+  }
+}
