@@ -1,0 +1,9 @@
+/* Fixture theme: minimal overrides on top of reveal.js "white". */
+:root { --r-heading-color: #703873; --r-link-color: #F47436; --r-main-font-size: 30px; }
+.reveal .slides { text-align: left; }
+.reveal section.divider h1, .reveal section.divider p { color: #fff; }
+.reveal .callout { background: #FBF3D9; border-left: 6px solid #F47436; padding: .4em .8em; font-size: .7em; }
+.reveal .compact { font-size: .8em; }
+.reveal img.mermaid { max-height: 480px; }
+.reveal .deck-logo { right: 16px; bottom: 12px; height: 40px; }
+.reveal .deck-footer { left: 16px; bottom: 12px; font-size: 14px; color: #777; }

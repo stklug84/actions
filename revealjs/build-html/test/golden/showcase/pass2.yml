@@ -1,0 +1,38 @@
+---
+from: json
+to: revealjs
+input-file: test/.scratch/build/showcase/ast.json
+output-file: test/.scratch/dist/showcase.html
+standalone: true
+embed-resources: true
+template: test/.scratch/build/showcase/engine/default.revealjs
+slide-level: 2
+resource-path:
+  - .
+  - test/decks/showcase
+variables:
+  revealjs-url: test/.scratch/build/showcase/vendor/reveal.js
+  deck-theme-base: white
+  deck-css:
+    - test/themes/testtheme/theme.css
+  reveal-config: |-
+    {
+      "center": false,
+      "controls": false,
+      "hash": true,
+      "height": 720,
+      "margin": 0.06,
+      "navigationMode": "linear",
+      "pdfSeparateFragments": false,
+      "progress": true,
+      "showSlideNumber": "all",
+      "slideNumber": "c/t",
+      "transition": "fade",
+      "width": 1280
+    }
+  deck-logo: test/themes/testtheme/logo.svg
+  deck-footer: Deck footer &lt;b&gt;overrides&lt;/b&gt; the theme
+syntax-highlighting: kate
+html-math-method:
+  method: katex
+  url: test/.scratch/build/showcase/vendor/katex/dist/

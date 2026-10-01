@@ -1,0 +1,13 @@
+---
+from: markdown+emoji
+to: json
+input-file: test/decks/showcase/slides.md
+output-file: test/.scratch/build/showcase/ast.json
+metadata-files:
+  - test/.scratch/build/showcase/metadata.yml
+filters:
+  - test/.scratch/build/showcase/engine/filters/mermaid.lua
+  - test/.scratch/build/showcase/engine/filters/structure.lua
+resource-path:
+  - .
+  - test/decks/showcase

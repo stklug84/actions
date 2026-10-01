@@ -1,0 +1,94 @@
+---
+# Composite action: publish build artifacts as a dated GitHub release and
+# prune older ones.
+#
+# Creates the release v<YYYY.MM.DD>-r<run-number> (unique and
+# chronologically sortable; GitHub marks the newest as "Latest", so
+# `gh release download` without a tag always fetches the current files)
+# with the given assets, a title "<title-prefix> <date> (<short-sha>)"
+# and notes listing the commit subject and the assets. With keep > 0 it
+# then keeps only the N newest releases created by this scheme, deleting
+# older ones together with their tags and sweeping orphaned tags of the
+# same pattern. Manually created releases or tags in other formats are
+# never touched.
+#
+# Extracted from the latex-build-cv reusable workflow, with two fixes:
+#   * re-runs of a workflow run reuse the release already tagged
+#     -r<run-number> and replace its assets (--clobber) instead of
+#     failing on "tag exists";
+#   * pruning is fail-safe: both the release and the tag inventory must
+#     succeed before anything is deleted, so a failed `gh release list`
+#     can never turn into a sweep that deletes the tags of live releases.
+#
+# The calling job must grant `contents: write`. With dry-run: 'true'
+# every mutation is printed instead of executed (no token needed), which
+# lets pull-request builds exercise the release path safely.
+#
+# Usage:
+#   - uses: stklug84/actions/release/publish-dated@v2
+#     with:
+#       files: "dist/*.pdf"
+#       title-prefix: "Slides"
+#       list-heading: "Decks:"
+#       keep: "10"
+#       dry-run: ${{ github.event_name != 'push' }}
+name: Publish dated release
+description: >-
+  Publish assets as the release v<YYYY.MM.DD>-r<run-number>, reuse it on
+  re-runs, and fail-safely prune older releases (and orphaned tags) of
+  the same scheme to the N newest.
+
+inputs:
+  files:
+    description: >-
+      Whitespace/newline-separated glob list of release assets. Every
+      glob must match at least one non-empty file.
+    required: true
+  title-prefix:
+    description: Release title prefix; the title is "<prefix> <YYYY-MM-DD> (<short-sha>)".
+    required: false
+    default: "Release"
+  list-heading:
+    description: Heading line above the asset list in the release notes.
+    required: false
+    default: "Files:"
+  keep:
+    description: >-
+      Keep only the N newest releases matching v<YYYY.MM.DD>-r<N> and
+      delete older ones including their tags; '0' disables pruning.
+    required: false
+    default: "0"
+  token:
+    description: Token with contents:write used by the gh CLI.
+    required: false
+    default: ${{ github.token }}
+  dry-run:
+    description: "'true' → print every gh mutation instead of executing it."
+    required: false
+    default: "false"
+
+outputs:
+  tag:
+    description: The release tag (created or reused).
+    value: ${{ steps.publish.outputs.tag }}
+  title:
+    description: The release title.
+    value: ${{ steps.publish.outputs.title }}
+
+runs:
+  using: composite
+  steps:
+    - name: Publish release and prune
+      id: publish
+      shell: bash
+      env:
+        FILES: ${{ inputs.files }}
+        TITLE_PREFIX: ${{ inputs.title-prefix }}
+        LIST_HEADING: ${{ inputs.list-heading }}
+        KEEP: ${{ inputs.keep }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        GH_TOKEN: ${{ inputs.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        "$GITHUB_ACTION_PATH/scripts/publish.sh"

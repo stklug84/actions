@@ -1,0 +1,8 @@
+---
+mermaid-dir: test/.scratch/build/showcase/mermaid
+mermaid-salt: 1dc9695f548768598908ccd8f7b856b50266c3be3f2f66bd1a92c2622dd5d6e2
+structure-file: test/.scratch/build/showcase/structure.json
+divider-background: '#703873'
+title-slide-attributes:
+  class: title extra
+  data-background-color: '#FBF3D9'
