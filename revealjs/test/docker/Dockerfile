@@ -9,5 +9,5 @@
 # DL3007 (avoid :latest) does not apply: every reference carries an
 # explicit version tag AND a digest.
 FROM pandoc/core:3.11.0.0-alpine@sha256:62518bfb6833705dc90a1634d8d879299bd820b3f74ad3b32fba8b618452553a AS pandoc
-FROM minlag/mermaid-cli:11.17.0@sha256:a6fb0574dded4086888b5e38476899c9aff8963196f689f11a0f8fceee588ce1 AS mermaid
+FROM minlag/mermaid-cli:12.0.0@sha256:fa995339034aae7e5cd4f61482248b7f5c51be355b1a6f6eda11a2bbf8401f5f AS mermaid
 FROM ghcr.io/astefanutti/decktape:3.16.1@sha256:66f5eff34a444628f5ab524da5390a454412fa879f3d15df96daf4c5c8da6b33 AS decktape
