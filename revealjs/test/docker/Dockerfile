@@ -10,4 +10,4 @@
 # explicit version tag AND a digest.
 FROM pandoc/core:3.11.0.0-alpine@sha256:62518bfb6833705dc90a1634d8d879299bd820b3f74ad3b32fba8b618452553a AS pandoc
 FROM minlag/mermaid-cli:12.0.1@sha256:2c5d27365df71da06c288beebe531ea3637cf9b422b871239a3b016233591d24 AS mermaid
-FROM ghcr.io/astefanutti/decktape:3.16.1@sha256:66f5eff34a444628f5ab524da5390a454412fa879f3d15df96daf4c5c8da6b33 AS decktape
+FROM ghcr.io/astefanutti/decktape:3.17.0@sha256:b94a8b9dca942499df84798b67812832a667522f191486bde4ecea77f818cd7f AS decktape
