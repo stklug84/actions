@@ -141,8 +141,8 @@ created by a root shell (act) are handed back to the workspace owner.
 ## Pinned runtime dependencies
 
 - PyYAML `6.0.2` (wrapper installs on demand; same pin as `cv/parse`).
-- reveal.js `6.0.2`, KaTeX `0.18.9` (package-lock.json).
+- reveal.js `6.0.2`, KaTeX `0.19.0` (package-lock.json).
 - Images (test pins in `revealjs/test/docker/Dockerfile`, consumers keep
-  their own): `pandoc/core:3.11.0.0-alpine`, `minlag/mermaid-cli:11.17.0`,
-  `ghcr.io/astefanutti/decktape:3.16.1`.
+  their own): `pandoc/core:3.11.0.0-alpine`, `minlag/mermaid-cli:12.0.1`,
+  `ghcr.io/astefanutti/decktape:3.17.0`.
 - `revealjs/build-pdf`: pypdf `6.19.0` for page count / page size checks.
