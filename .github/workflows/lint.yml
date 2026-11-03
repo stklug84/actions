@@ -39,7 +39,7 @@ jobs:
   # in `runs.steps[].run`, which actionlint does not read, and the cv
   # tooling carries its own per-directory pyproject.toml.
   repo-lint:
-    uses: stklug84/github-workflows/.github/workflows/repo-lint.yml@ef0b2e5ae729ef22d91331095281856a97b4dbd5  # v2.0.0
+    uses: stklug84/github-workflows/.github/workflows/repo-lint.yml@e099d4771b62e7814a0206424b176b91a1747ecc  # v4.1.0
 
   shellcheck-actions:
     name: shellcheck (composite actions)
